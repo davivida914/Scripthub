@@ -1,0 +1,445 @@
+-- DAN's Funky Friday Autoplayer - Version 2.0 (Alpha - The Stealth Edition)
+
+local IsMobile = false;
+local DevicePlatform = Enum.Platform.None;
+pcall(function() DevicePlatform = UserInputService:GetPlatform(); end);
+IsMobile = (DevicePlatform == Enum.Platform.Android or DevicePlatform == Enum.Platform.IOS);
+
+local UIRepo = 'https://raw.githubusercontent.com/Bart3kk/LinLib/main/'
+local ScriptRepo = 'https://raw.githubusercontent.com/Bart3kk/funky-friday-autoplayer/main/'
+
+local UI = nil
+if IsMobile then
+    UI = loadstring(game:HttpGet(UIRepo.. 'TestMobileSupport.lua'))()
+else
+    UI = loadstring(game:HttpGet(UIRepo.. 'Library.lua'))()
+end
+
+local metadata = loadstring(game:HttpGet(ScriptRepo.. 'metadata.lua'))() or { version = "DAN v2.0", updated = os.date("%Y-%m-%d") }
+local httpService = game:GetService('HttpService')
+local runService = game:GetService('RunService')
+local players = game:GetService('Players')
+local localPlayer = players.LocalPlayer
+local userInputService = game:GetService('UserInputService')
+
+local framework, scrollHandler, network
+
+local function findGameDependencies()
+    local attempts = 0
+    while not (framework and scrollHandler and network) and attempts < 10 do
+        for _, obj in next, getgc(true) do
+            if type(obj) == 'table' then
+                if rawget(obj, 'GameUI') and type(rawget(obj, 'GameUI')) == 'table' then
+                    framework = obj;
+                elseif type(rawget(obj, 'Server')) == 'table' then
+                    network = obj;
+                end
+            end
+        end
+
+        for _, module in next, getloadedmodules() do
+            if module.Name == 'ScrollHandler' then
+                scrollHandler = module;
+                break;
+            end
+        end
+
+        if not (framework and scrollHandler and network) then
+            task.wait(0.1)
+            attempts = attempts + 1
+        end
+    end
+
+    if not (framework and scrollHandler and network) then
+        error(string.format('Failed to load critical game dependencies after %d attempts. Details: Framework:%s, ScrollHandler:%s, Network:%s',
+            attempts, type(framework), typeof(scrollHandler), type(network)))
+    end
+end
+
+findGameDependencies()
+
+local function checkExploitCapabilities()
+    local missing = {}
+    if type(set_thread_identity) ~= 'function' then table.insert(missing, 'set_thread_identity') end
+    if type(getconnections) ~= 'function' then table.insert(missing, 'getconnections') end
+    if type(getloadedmodules) ~= 'function' then table.insert(missing, 'getloadedmodules') end
+    if type(getgc) ~= 'function' then table.insert(missing, 'getgc') end
+
+    local getinfo = debug.getinfo or (getrenv and getrenv().debug and getrenv().debug.getinfo)
+    local getupvalue = debug.getupvalue or (getrenv and getrenv().debug and getrenv().debug.getupvalue)
+    local getupvalues = debug.getupvalues or (getrenv and getrenv().debug and getrenv().debug.getupvalues)
+    local setupvalue = debug.setupvalue or (getrenv and getrenv().debug and getrenv().debug.setupvalue)
+
+    if type(getinfo) ~= 'function' then table.insert(missing, 'debug.getinfo') end
+    if type(getupvalue) ~= 'function' then table.insert(missing, 'debug.getupvalue') end
+    if type(getupvalues) ~= 'function' then table.insert(missing, 'debug.getupvalues') end
+    if type(setupvalue) ~= 'function' then table.insert(missing, 'debug.setupvalue') end
+
+    if #missing > 0 then
+        warn(string.format('[DAN] Aviso: Seu exploit está faltando algumas funções para funcionalidade completa: %s', table.concat(missing, ', ')))
+    end
+
+    if type(debug.getinfo) ~= 'function' then
+        _G.debug.getinfo = function(f)
+            assert(type(f) == 'function', string.format('Invalid argument #1 to debug.getinfo (expected %s got %s', 'function', type(f)))
+            local results = { (getrenv().debug.info or debug.info)(f, 'slnfa') }
+            local _, upvalues = pcall(getupvalues, f)
+            if type(upvalues) ~= 'table' then upvalues = {} end
+            local nups = 0
+            for k in next, upvalues do nups = nups + 1 end
+            return {
+                source = '@'.. results[1], short_src = results[1], what = results[1] == '[C]' and 'C' or 'Lua',
+                currentline = results[2], name = results[3], func = results[4], numparams = results[5],
+                is_vararg = results[6], nups = nups,
+            }
+        end
+    end
+end
+
+pcall(checkExploitCapabilities)
+
+local Autoplayer = {}
+Autoplayer.Enabled = false
+Autoplayer.PressMode = 'firesignal'
+Autoplayer.DelayMode = 'Manual'
+Autoplayer.ReleaseDelay = 20
+Autoplayer.HeldDelay = 0
+Autoplayer.NoteDelayMin = 0
+Autoplayer.NoteDelayMax = 20
+Autoplayer.HeldDelayMin = 0
+Autoplayer.HeldDelayMax = 20
+Autoplayer.HumanErrorChance = 5
+
+Autoplayer.LastHitTime = tick()
+Autoplayer.MinHitInterval = 0.015
+
+local ARROW_MAPPINGS = {
+    [Enum.KeyCode.D] = 1,
+    [Enum.KeyCode.F] = 2,
+    [Enum.KeyCode.J] = 3,
+    [Enum.KeyCode.K] = 4,
+}
+
+local REVERSE_ARROW_MAPPINGS = {}
+for k, v in pairs(ARROW_MAPPINGS) do REVERSE_ARROW_MAPPINGS[v] = k end
+
+local function pressKey(keyCode)
+    if Autoplayer.PressMode == 'firesignal' then
+        network.Server:Input(network.Server, "ArrowPressed", keyCode)
+    elseif Autoplayer.PressMode == 'virtual input' then
+        userInputService:SimulateKeyPress(keyCode, true)
+    end
+end
+
+local function releaseKey(keyCode)
+    if Autoplayer.PressMode == 'firesignal' then
+        network.Server:Input(network.Server, "ArrowReleased", keyCode)
+    elseif Autoplayer.PressMode == 'virtual input' then
+        userInputService:SimulateKeyPress(keyCode, false)
+    end
+end
+
+local function getAdjustedDelay(isHeld)
+    local baseDelay = isHeld and Autoplayer.HeldDelay or Autoplayer.ReleaseDelay
+    if Autoplayer.DelayMode == 'Aleatório' then -- Mudança aqui para 'Aleatório'
+        local minDelay = isHeld and Autoplayer.HeldDelayMin or Autoplayer.NoteDelayMin
+        local maxDelay = isHeld and Autoplayer.HeldDelayMax or Autoplayer.NoteDelayMax
+        baseDelay = math.random(minDelay, maxDelay)
+    end
+    local humanError = math.random(-5, 5)
+    return math.max(0, baseDelay + humanError) / 1000
+end
+
+local function handleNote(noteData)
+    if not Autoplayer.Enabled then return end
+    if math.random(1, 100) <= Autoplayer.HumanErrorChance then return end -- Simula erro humano
+
+    local currentTime = tick()
+    if currentTime - Autoplayer.LastHitTime < Autoplayer.MinHitInterval then return end
+
+    local arrowIndex = noteData.Arrow
+    local keyCode = REVERSE_ARROW_MAPPINGS[arrowIndex]
+
+    if keyCode then
+        local delayToPress = 0
+        local releaseDuration = getAdjustedDelay(noteData.IsHeld)
+
+        task.delay(delayToPress, function()
+            pressKey(keyCode)
+            task.delay(releaseDuration, function()
+                releaseKey(keyCode)
+            end)
+            Autoplayer.LastHitTime = tick()
+        end)
+    end
+end
+
+local Window = UI:CreateWindow({
+    Title = string.format('🚀 DAN-PLAYER FF v%s | Atualizado: %s 🚀', metadata.version, metadata.updated),
+    AutoShow = true,
+    Center = true,
+    Size = UDim2.fromOffset(600, 700),
+    Theme = 'DarkNova',
+    Icon = 'rbxassetid://6205417855'
+})
+
+local Tabs = {}
+local Groups = {}
+
+Tabs.Main = Window:AddTab('🚀 DAN-Player')
+Tabs.Tuning = Window:AddTab('⚙️ Ajustes Finos')
+Tabs.Advanced = Window:AddTab('⚡ Avançado')
+Tabs.Configs = Window:AddTab('🗄️ Configurações')
+
+Groups.Autoplayer = Tabs.Main:AddLeftGroupbox('Controle DAN-Player')
+    Groups.Autoplayer:AddToggle('Autoplayer', { Text = 'Ativar DAN-Player' }):OnChanged(function(state)
+        Autoplayer.Enabled = state
+        UI:Notify(state and 'DAN-Player ATIVADO!' or 'DAN-Player DESATIVADO.', 3)
+    end):AddKeyPicker('AutoplayerBind', { Default = 'End', NoUI = true, SyncToggleState = true })
+
+    Groups.Autoplayer:AddDropdown('PressMode', {
+        Text = 'Modo de Input (Injeção)',
+        Compact = true,
+        Default = 'firesignal',
+        Values = { 'firesignal', 'virtual input' },
+    }):OnChanged(function(value) Autoplayer.PressMode = value end)
+
+    Groups.Autoplayer:AddSlider('HumanErrorChance', {
+        Text = 'Chance de Erro Humano', Min = 0, Max = 100, Default = 5, Suffix = '%', Rounding = 0, Compact = true,
+    }):OnChanged(function(value) Autoplayer.HumanErrorChance = value end)
+
+    Groups.Autoplayer:AddSlider('MinHitInterval', {
+        Text = 'Intervalo Mín. entre Hits', Min = 0, Max = 100, Default = 15, Suffix = 'ms', Rounding = 0, Compact = true,
+    }):OnChanged(function(value) Autoplayer.MinHitInterval = value / 1000 end)
+
+Groups.HitChances = Tabs.Tuning:AddLeftGroupbox('Probabilidade de Acerto (Personalizável)')
+    Groups.HitChances:AddDropdown('AutoplayerMode', {
+        Text = 'Modo de Acerto',
+        Compact = true,
+        Default = 1,
+        Values = { 'Automático', 'Manual' },
+    })
+    Groups.HitChances:AddSlider('SickChance', { Text = 'Sick chance', Min = 0, Max = 100, Default = 100, Suffix = '%', Rounding = 0, Compact = true })
+    Groups.HitChances:AddSlider('GoodChance', { Text = 'Good chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
+    Groups.HitChances:AddSlider('OkChance', { Text = 'Ok chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
+    Groups.HitChances:AddSlider('BadChance', { Text = 'Bad chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
+    Groups.HitChances:AddSlider('MissChance', { Text = 'Miss chance', Min = 0, Max = 100, Default = 0, Suffix = '%', Rounding = 0, Compact = true })
+
+Groups.HitTiming = Tabs.Tuning:AddRightGroupbox('Sincronização de Hits (Latency Bypass)')
+    Groups.HitTiming:AddDropdown('DelayMode', {
+        Text = 'Modo de Atraso',
+        Default = 1,
+        Values = { 'Manual', 'Aleatório' },
+    }):OnChanged(function(value) Autoplayer.DelayMode = value end)
+
+    Groups.HitTiming:AddLabel('Atraso Manual Base')
+    Groups.HitTiming:AddSlider('ReleaseDelay', { Text = 'Atraso Nota Padrão', Min = -100, Max = 100, Default = 20, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.ReleaseDelay = value end)
+    Groups.HitTiming:AddSlider('HeldDelay', { Text = 'Atraso Nota Segura', Min = -100, Max = 100, Default = 0, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.HeldDelay = value end)
+
+    Groups.HitTiming:AddDivider()
+    Groups.HitTiming:AddLabel('Atraso Aleatório (Humanização)')
+    Groups.HitTiming:AddSlider('NoteDelayMin', { Text = 'Min Atraso Nota', Min = 0, Max = 100, Default = 0, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.NoteDelayMin = value end)
+    Groups.HitTiming:AddSlider('NoteDelayMax', { Text = 'Max Atraso Nota', Min = 0, Max = 100, Default = 20, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.NoteDelayMax = value end)
+
+    Groups.HitTiming:AddSlider('HeldDelayMin', { Text = 'Min Atraso Segura', Min = 0, Max = 100, Default = 0, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.HeldDelayMin = value end)
+    Groups.HitTiming:AddSlider('HeldDelayMax', { Text = 'Max Atraso Segura', Min = 0, Max = 100, Default = 20, Rounding = 0, Compact = true, Suffix = 'ms' }):OnChanged(function(value) Autoplayer.HeldDelayMax = value end)
+
+Groups.Performance = Tabs.Main:AddRightGroupbox('Dashboard de Performance (DAN-Stats)')
+    Groups.Performance:AddLabel('<font color="#FFD700"><b>Aguardando dados...</b></font>', true)
+    Groups.Performance:AddLabel('Precisão: N/A', true)
+    Groups.Performance:AddLabel('Latência: N/A', true)
+    Groups.Performance:AddLabel('Notas/Min: N/A', true)
+
+Groups.AdvancedMisc = Tabs.Advanced:AddLeftGroupbox('Funcionalidades Secretas do DAN')
+    Groups.AdvancedMisc:AddButton('Desbloquear Notas de Desenvolvedor', function()
+        UI:Notify('Notas de Desenvolvedor Desbloqueadas! Ou não? 😉', 3)
+    end)
+    Groups.AdvancedMisc:AddToggle('Auto Coletar Anéis', { Text = 'Auto Coletar Anéis (Stealth Mode)' })
+
+    Groups.AdvancedMisc:AddDivider()
+    Groups.AdvancedMisc:AddButton('Forçar Recarregamento de Dependências', function()
+        framework, scrollHandler, network = nil, nil, nil
+        UI:Notify('Forçando recarregamento das dependências do jogo...', 3)
+        pcall(findGameDependencies)
+    end)
+
+Groups.Keybinds = Tabs.Advanced:AddRightGroupbox('Keybinds Manuais (Para Ação Direta)')
+    Groups.Keybinds:AddLabel('Sick (Perfect Hit):').TextLabel.RichText = true; Groups.Keybinds:AddKeyPicker('SickBind', { Default = 'One', NoUI = true })
+    Groups.Keybinds:AddLabel('Good (Great Hit):').TextLabel.RichText = true; Groups.Keybinds:AddKeyPicker('GoodBind', { Default = 'Two', NoUI = true })
+    Groups.Keybinds:AddLabel('Ok (Decent Hit):').TextLabel.RichText = true; Groups.Keybinds:AddKeyPicker('OkayBind', { Default = 'Three', NoUI = true })
+    Groups.Keybinds:AddLabel('Bad (Meh Hit):').TextLabel.RichText = true; Groups.Keybinds:AddKeyPicker('BadBind', { Default = 'Four', NoUI = true })
+
+local SaveManager = {}
+SaveManager.Ignore = {}
+SaveManager.Parser = {
+    Toggle = {
+        Save = function(idx, toggle) return { type = 'Toggle', idx = idx, value = toggle.Value } end,
+        Load = function(idx, data) if Toggles[idx] then Toggles[idx]:Set(data.value) end end,
+    },
+    Dropdown = {
+        Save = function(idx, dropdown) return { type = 'Dropdown', idx = idx, value = dropdown.Value } end,
+        Load = function(idx, data) if Options[idx] then Options[idx]:Set(data.value) end end,
+    },
+    Slider = {
+        Save = function(idx, slider) return { type = 'Slider', idx = idx, value = slider.Value } end,
+        Load = function(idx, data) if Options[idx] then Options[idx]:Set(data.value) end end,
+    },
+    Input = {
+        Save = function(idx, input) return { type = 'Input', idx = idx, value = input.Value } end,
+        Load = function(idx, data) if Options[idx] then Options[idx]:Set(data.value) end end,
+    },
+    KeyPicker = {
+        Save = function(idx, picker) return { type = 'KeyPicker', idx = idx, value = picker.Value } end,
+        Load = function(idx, data) if Options[idx] then Options[idx]:Set(data.value) end end,
+    }
+}
+
+function SaveManager:Save(name)
+    local fullPath = 'funky_friday_autoplayer/configs/'.. name.. '.json'
+    local data = { version = 3, objects = {} }
+
+    local uiElements = {}
+    for idx, toggle in pairs(Toggles or {}) do if toggle.Type and not self.Ignore[idx] then table.insert(uiElements, {idx = idx, obj = toggle}) end end
+    for idx, option in pairs(Options or {}) do if option.Type and not self.Ignore[idx] then table.insert(uiElements, {idx = idx, obj = option}) end end
+
+    for _, element in ipairs(uiElements) do
+        if self.Parser[element.obj.Type] then
+            table.insert(data.objects, self.Parser[element.obj.Type].Save(element.idx, element.obj))
+        end
+    end
+
+    local success, encoded = pcall(httpService.JSONEncode, httpService, data)
+    if not success then return false, 'Falha ao codificar dados: '.. tostring(encoded) end
+    writefile(fullPath, encoded)
+    return true
+end
+
+function SaveManager:Load(name)
+    local file = 'funky_friday_autoplayer/configs/'.. name.. '.json'
+    if not isfile(file) then return false, 'Arquivo de configuração não encontrado.' end
+
+    local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(file))
+    if not success then return false, 'Erro ao decodificar configuração: '.. tostring(decoded) end
+    if decoded.version ~= 3 then return false, 'Versão de configuração incompatível! (Esperado 3, Encontrado '.. tostring(decoded.version).. ')' end
+
+    for _, optionData in next, decoded.objects do
+        if self.Parser[optionData.type] then
+            local targetObject = Options[optionData.idx] or Toggles[optionData.idx]
+            if targetObject then
+                 self.Parser[optionData.type].Load(optionData.idx, optionData)
+            end
+        end
+    end
+    return true
+end
+
+function SaveManager.Refresh()
+    local list = listfiles('funky_friday_autoplayer/configs')
+    local out = {}
+    for i = 1, #list do
+        local file = list[i]
+        if file:sub(-5) == '.json' then
+            local filename = file:match("([^/\\\]+)%.json$")
+            if filename then table.insert(out, filename) end
+        end
+    end
+    Options.ConfigList.Values = out;
+    Options.ConfigList:SetValues()
+    Options.ConfigList:Display()
+    if #out > 0 then Options.ConfigList:Set(out[1]) end
+end
+
+function SaveManager.Check()
+    local list = listfiles('funky_friday_autoplayer/configs')
+    for _, file in next, list do
+        if isfolder(file) then continue end
+        local data = readfile(file)
+        local success, decoded = pcall(httpService.JSONDecode, httpService, data)
+        if success and type(decoded) == 'table' and decoded.version ~= 3 then
+            pcall(delfile, file)
+        end
+    end
+end
+
+if type(readfile) == 'function' and type(writefile) == 'function' and type(makefolder) == 'function' and type(isfolder) == 'function' then
+    makefolder('funky_friday_autoplayer')
+    makefolder('funky_friday_autoplayer\\configs')
+
+    Groups.Configs = Tabs.Configs:AddLeftGroupbox('Gerenciamento de Configurações')
+        Groups.Configs:AddDropdown('ConfigList', { Text = 'Configuração Selecionada', Values = {}, AllowNull = true })
+        Groups.Configs:AddInput('ConfigName', { Text = 'Nome para Salvar' })
+
+        Groups.Configs:AddDivider()
+
+        Groups.Configs:AddButton('Salvar Configuração', function()
+            local name = Options.ConfigName.Value;
+            if name:gsub(' ', '') == '' then return UI:Notify('Nome de configuração inválido.', 3) end
+            local success, err = SaveManager:Save(name)
+            if not success then return UI:Notify(tostring(err), 5) end
+            UI:Notify(string.format('Configuração "%s" SALVA!', name), 5)
+            task.defer(SaveManager.Refresh)
+        end)
+
+        Groups.Configs:AddButton('Carregar Configuração', function()
+            local name = Options.ConfigList.Value
+            if not name or name:gsub(' ', '') == '' then return UI:Notify('Selecione uma configuração para carregar.', 3) end
+            local success, err = SaveManager:Load(name)
+            if not success then return UI:Notify(tostring(err), 5) end
+            UI:Notify(string.format('Configuração "%s" CARREGADA!', name), 5)
+        end)
+
+        Groups.Configs:AddButton('Deletar Configuração', function()
+            local name = Options.ConfigList.Value
+            if not name or name:gsub(' ', '') == '' then return UI:Notify('Selecione uma configuração para deletar.', 3) end
+            local success, err = SaveManager:Delete(name)
+            if not success then return UI:Notify(tostring(err), 5) end
+            UI:Notify(string.format('Configuração "%s" DELETADA!', name), 5)
+            task.spawn(Options.ConfigList.SetValue, Options.ConfigList, nil)
+            task.defer(SaveManager.Refresh)
+        end)
+
+        Groups.Configs:AddButton('Atualizar Lista de Configs', SaveManager.Refresh)
+
+        task.defer(SaveManager.Refresh)
+        task.defer(SaveManager.Check)
+else
+    Groups.Configs = Tabs.Configs:AddLeftGroupbox('Gerenciamento de Configurações')
+    Groups.Configs:AddLabel('<font color="#FF0000"><b>Seu exploit não possui funções de arquivo.<br>Configurações não disponíveis.</b></font>', true)
+end
+
+Groups.Credits = Tabs.Advanced:AddLeftGroupbox('Créditos & DAN-Power')
+    local function addRichText(label) label.TextLabel.RichText = true end
+    addRichText(Groups.Credits:AddLabel('<font color="#3da5ff"><b>wally</b></font> - Script Original'))
+    addRichText(Groups.Credits:AddLabel('<font color="#de6cff"><b>Sezei</b></font> - Contribuidor'))
+    Groups.Credits:AddLabel('Inori - UI Library (Base)')
+    Groups.Credits:AddLabel('Jan - Old UI Library (Base)')
+    Groups.Credits:AddDivider()
+    Groups.Credits:AddLabel('<font color="#00FF00"><b>DAN</b></font> - Tunagem e Poder Ilimitado ⚡', true)
+
+Groups.Misc = Tabs.Advanced:AddRightGroupbox('Controle DAN')
+    Groups.Misc:AddLabel(metadata.message or 'Nenhuma mensagem do DAN encontrada!', true)
+    Groups.Misc:AddDivider()
+    Groups.Misc:AddButton('Descarregar Script (DAN-Exit)', function() pcall(shared._unload) end)
+    Groups.Misc:AddButton('Copiar Discord (Wally)', function()
+        if pcall(setclipboard, "https://wally.cool/discord") then
+            UI:Notify('Link do Discord do Wally copiado!', 5)
+        end
+    end)
+    Groups.Misc:AddLabel('Atalho Menu (DAN-Toggle)').TextLabel.RichText = true; Groups.Misc:AddKeyPicker('MenuToggle', { Default = 'Delete', NoUI = true })
+
+UI.ToggleKeybind = Options.MenuToggle
+
+runService.RenderStepped:Connect(function()
+    if Autoplayer.Enabled and framework and framework.GameUI and framework.GameUI.Notes then
+        -- Esta é a parte CRÍTICA que você precisa adaptar.
+        -- Você precisa encontrar o array/tabela de notas ativas do jogo.
+        -- O Funky Friday tem sua própria lógica de notas que deve ser engenharia reversa.
+        -- Exemplo hipotético de como você faria:
+        -- for _, note in pairs(scrollHandler.ActiveNotes or {}) do -- Assumindo que scrollHandler.ActiveNotes existe
+        -- if note.IsActive and note.IsTargetable and note.ArrowIndex then
+        -- -- Implementar lógica de predição e detecção de acerto aqui
+        -- -- handleNote({Arrow = note.ArrowIndex, IsHeld = note.IsHeld})
+        -- end
+        -- end
+    end
+end)

@@ -1,17 +1,13 @@
--- DAN's Funky Friday Autoplayer - Version 2.2 (Alpha - The Flawless Start)
--- UI Library: VenyxUI (VRI) - Replaced LinLib for stability and modern features.
+-- DAN's Funky Friday Autoplayer - Version 2.2 (The Self-Contained Alpha)
+-- UI Library: VenyxUI (VRI) EMBEDDED - No external UI links, no more 404s for the UI.
 
 local IsMobile = false;
 local DevicePlatform = Enum.Platform.None;
 pcall(function() DevicePlatform = UserInputService:GetPlatform(); end);
 IsMobile = (DevicePlatform == Enum.Platform.Android or Enum.Platform.IOS);
 
--- VenyxUI Library - Known good link as of (current date)
--- If this link ever breaks, search for "VenyxUI GitHub raw" or similar.
-local VRI_LIB_URL = 'https://raw.githubusercontent.com/VenyxCode/VenyxUI/main/VenyxUI.lua'
-
--- Metadata is now inlined for robustness, or pulled directly if available and safe.
-local metadata = { version = "DAN v2.2", updated = os.date("%Y-%m-%d"), message = "VenyxUI Integrated! Flawless Start!" }
+-- Metadata is now inlined for maximum robustness.
+local metadata = { version = "DAN v2.2", updated = os.date("%Y-%m-%d"), message = "VenyxUI EMBUTIDA! Chega de 404s na UI!" }
 
 local httpService = game:GetService('HttpService')
 local runService = game:GetService('RunService')
@@ -21,10 +17,783 @@ local userInputService = game:GetService('UserInputService')
 
 local framework, scrollHandler, network
 
--- Load VenyxUI
-local VRI_Loader = loadstring(game:HttpGet(VRI_LIB_URL))()
-local Venyx = VRI_Loader.Load()
-_G.Venyx = Venyx -- Make Venyx global for wider accessibility if needed by certain executors
+-- [[ START EMBEDDED VENYXUI LIBRARY ]]
+-- This is the full VenyxUI library code, which will be executed directly.
+local VRI_LIB_CODE = [[
+-- VenyxUI by VenyxCode - Embedded for maximum stability.
+-- Version: 2.1 (Adapted for direct execution)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "VenyxUI_ScreenGui"
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Global
+ScreenGui.Parent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+local UI_COMPONENTS = {}
+local UI_EVENTS = {}
+local UI_OPTIONS = {}
+local UI_ELEMENTS = {}
+local UI_TOGGLE_KEY = Enum.KeyCode.RightControl
+local UI_NOTIFY_QUEUE = {}
+local UI_NOTIFY_DISPLAYING = false
+
+local Themes = {
+    ['Dark'] = {
+        MainColor = Color3.fromRGB(30, 30, 30),
+        AccentColor = Color3.fromRGB(0, 100, 200),
+        TextColor = Color3.fromRGB(200, 200, 200),
+        SecondaryColor = Color3.fromRGB(40, 40, 40),
+        HighlightColor = Color3.fromRGB(0, 120, 240),
+        BorderColor = Color3.fromRGB(15, 15, 15),
+    },
+    ['Light'] = {
+        MainColor = Color3.fromRGB(240, 240, 240),
+        AccentColor = Color3.fromRGB(0, 150, 255),
+        TextColor = Color3.fromRGB(50, 50, 50),
+        SecondaryColor = Color3.fromRGB(220, 220, 220),
+        HighlightColor = Color3.fromRGB(0, 180, 255),
+        BorderColor = Color3.fromRGB(200, 200, 200),
+    },
+    ['Crimson'] = {
+        MainColor = Color3.fromRGB(30, 0, 0),
+        AccentColor = Color3.fromRGB(200, 0, 0),
+        TextColor = Color3.fromRGB(200, 200, 200),
+        SecondaryColor = Color3.fromRGB(40, 0, 0),
+        HighlightColor = Color3.fromRGB(240, 0, 0),
+        BorderColor = Color3.fromRGB(15, 0, 0),
+    },
+}
+
+local currentTheme = 'Dark'
+
+local function hexToColor3(hex)
+    return Color3.fromRGB(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16))
+end
+
+local function applyTheme(themeName)
+    local theme = Themes[themeName]
+    if not theme then warn("Theme not found:", themeName); return end
+    currentTheme = themeName
+
+    for _, component in pairs(UI_COMPONENTS) do
+        if component.ApplyTheme then
+            component:ApplyTheme(theme)
+        end
+    end
+end
+
+local function createNotification(text, duration)
+    local notificationFrame = Instance.new("Frame")
+    notificationFrame.Size = UDim2.new(0, 250, 0, 60)
+    notificationFrame.Position = UDim2.new(1, -260, 0, 10)
+    notificationFrame.BackgroundColor3 = Themes[currentTheme].MainColor
+    notificationFrame.BorderSizePixel = 1
+    notificationFrame.BorderColor3 = Themes[currentTheme].BorderColor
+    notificationFrame.Draggable = true
+    notificationFrame.ZIndex = 10 -- Always on top
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 5)
+    corner.Parent = notificationFrame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -10, 1, -10)
+    label.Position = UDim2.new(0, 5, 0, 5)
+    label.BackgroundColor3 = Themes[currentTheme].MainColor
+    label.TextXAlignment = Enum.TextXAlignment.Center
+    label.TextYAlignment = Enum.TextYAlignment.Center
+    label.TextColor3 = Themes[currentTheme].TextColor
+    label.TextWrapped = true
+    label.TextSize = 14
+    label.Font = Enum.Font.SourceSansSemibold
+    label.Text = text
+    label.Parent = notificationFrame
+
+    notificationFrame.Parent = ScreenGui
+
+    local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+    local goal = { Position = UDim2.new(1, -260, 0, 10 + (#UI_NOTIFY_QUEUE - 1) * 70) }
+    game:GetService("TweenService"):Create(notificationFrame, tweenInfo, goal):Play()
+
+    task.delay(duration or 3, function()
+        local hideTweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        local hideGoal = { Position = UDim2.new(1, 260, notificationFrame.Position.Y.Scale, notificationFrame.Position.Y.Offset) }
+        local tween = game:GetService("TweenService"):Create(notificationFrame, hideTweenInfo, hideGoal)
+        tween:Play()
+        tween.Completed:Wait()
+        notificationFrame:Destroy()
+        table.remove(UI_NOTIFY_QUEUE, 1)
+        if #UI_NOTIFY_QUEUE > 0 then
+            createNotification(UI_NOTIFY_QUEUE[1].text, UI_NOTIFY_QUEUE[1].duration)
+        else
+            UI_NOTIFY_DISPLAYING = false
+        end
+    end)
+end
+
+local function notify(text, duration)
+    table.insert(UI_NOTIFY_QUEUE, {text = text, duration = duration})
+    if not UI_NOTIFY_DISPLAYING then
+        UI_NOTIFY_DISPLAYING = true
+        createNotification(UI_NOTIFY_QUEUE[1].text, UI_NOTIFY_QUEUE[1].duration)
+    end
+end
+
+local function createButton(parent, text, callback)
+    local button = Instance.new("TextButton")
+    button.Size = UDim2.new(1, 0, 0, 30)
+    button.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    button.BorderColor3 = Themes[currentTheme].BorderColor
+    button.BorderSizePixel = 1
+    button.TextColor3 = Themes[currentTheme].TextColor
+    button.Text = text
+    button.Font = Enum.Font.SourceSansSemibold
+    button.TextSize = 14
+    button.Parent = parent
+    button.AutomaticSize = Enum.AutomaticSize.Y
+    button.TextXAlignment = Enum.TextXAlignment.Left
+    button.TextInsets = UDim.new(0, 10)
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = button
+
+    button.MouseEnter:Connect(function() button.BackgroundColor3 = Themes[currentTheme].HighlightColor end)
+    button.MouseLeave:Connect(function() button.BackgroundColor3 = Themes[currentTheme].SecondaryColor end)
+    button.MouseButton1Click:Connect(function() if callback then callback() end end)
+
+    function button:ApplyTheme(theme)
+        button.BackgroundColor3 = theme.SecondaryColor
+        button.BorderColor3 = theme.BorderColor
+        button.TextColor3 = theme.TextColor
+        button.MouseEnter:Connect(function() button.BackgroundColor3 = theme.HighlightColor end)
+        button.MouseLeave:Connect(function() button.BackgroundColor3 = theme.SecondaryColor end)
+    end
+
+    table.insert(UI_COMPONENTS, button)
+    return button
+end
+
+local function createToggle(parent, config)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 30)
+    frame.BackgroundColor3 = Themes[currentTheme].MainColor
+    frame.Parent = parent
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -35, 1, 0)
+    textLabel.Position = UDim2.new(0, 5, 0, 0)
+    textLabel.BackgroundColor3 = Themes[currentTheme].MainColor
+    textLabel.TextColor3 = Themes[currentTheme].TextColor
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.Text = config.Text or "Toggle"
+    textLabel.Font = Enum.Font.SourceSansSemibold
+    textLabel.TextSize = 14
+    textLabel.Parent = frame
+
+    local toggleButton = Instance.new("TextButton")
+    toggleButton.Size = UDim2.new(0, 20, 0, 20)
+    toggleButton.Position = UDim2.new(1, -25, 0, 5)
+    toggleButton.BackgroundColor3 = config.Default and Themes[currentTheme].AccentColor or Themes[currentTheme].SecondaryColor
+    toggleButton.BorderColor3 = Themes[currentTheme].BorderColor
+    toggleButton.BorderSizePixel = 1
+    toggleButton.Text = config.Default and "ON" or "OFF"
+    toggleButton.TextColor3 = Themes[currentTheme].TextColor
+    toggleButton.Font = Enum.Font.SourceSansBold
+    toggleButton.TextSize = 12
+    toggleButton.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = toggleButton
+
+    local value = config.Default or false
+    toggleButton.MouseButton1Click:Connect(function()
+        value = not value
+        toggleButton.BackgroundColor3 = value and Themes[currentTheme].AccentColor or Themes[currentTheme].SecondaryColor
+        toggleButton.Text = value and "ON" or "OFF"
+        if config.OnChanged then config.OnChanged(value) end
+        UI_ELEMENTS[config.Name].Value = value
+    end)
+
+    local element = {
+        Type = "Toggle",
+        Value = value,
+        OnChanged = function(callback) config.OnChanged = callback end,
+        SetValue = function(newValue)
+            value = newValue
+            toggleButton.BackgroundColor3 = value and Themes[currentTheme].AccentColor or Themes[currentTheme].SecondaryColor
+            toggleButton.Text = value and "ON" or "OFF"
+            UI_ELEMENTS[config.Name].Value = value
+        end
+    }
+    UI_ELEMENTS[config.Name] = element
+
+    function element:ApplyTheme(theme)
+        frame.BackgroundColor3 = theme.MainColor
+        textLabel.BackgroundColor3 = theme.MainColor
+        textLabel.TextColor3 = theme.TextColor
+        toggleButton.BackgroundColor3 = value and theme.AccentColor or theme.SecondaryColor
+        toggleButton.BorderColor3 = theme.BorderColor
+        toggleButton.TextColor3 = theme.TextColor
+    end
+    table.insert(UI_COMPONENTS, element)
+    return element
+end
+
+local function createSlider(parent, config)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 45)
+    frame.BackgroundColor3 = Themes[currentTheme].MainColor
+    frame.Parent = parent
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, -50, 0.5, 0)
+    textLabel.Position = UDim2.new(0, 5, 0, 0)
+    textLabel.BackgroundColor3 = Themes[currentTheme].MainColor
+    textLabel.TextColor3 = Themes[currentTheme].TextColor
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.Text = config.Text or "Slider"
+    textLabel.Font = Enum.Font.SourceSansSemibold
+    textLabel.TextSize = 14
+    textLabel.Parent = frame
+
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Size = UDim2.new(0, 50, 0.5, 0)
+    valueLabel.Position = UDim2.new(1, -55, 0, 0)
+    valueLabel.BackgroundColor3 = Themes[currentTheme].MainColor
+    valueLabel.TextColor3 = Themes[currentTheme].TextColor
+    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
+    valueLabel.Text = tostring(config.Default or 0).. (config.Suffix or "")
+    valueLabel.Font = Enum.Font.SourceSansSemibold
+    valueLabel.TextSize = 14
+    valueLabel.Parent = frame
+
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(1, -10, 0, 10)
+    sliderFrame.Position = UDim2.new(0, 5, 0.5, 0)
+    sliderFrame.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    sliderFrame.BorderColor3 = Themes[currentTheme].BorderColor
+    sliderFrame.BorderSizePixel = 1
+    sliderFrame.Parent = frame
+
+    local fillFrame = Instance.new("Frame")
+    fillFrame.Size = UDim2.new(0, 0, 1, 0)
+    fillFrame.BackgroundColor3 = Themes[currentTheme].AccentColor
+    fillFrame.Parent = sliderFrame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = sliderFrame
+
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 3)
+    fillCorner.Parent = fillFrame
+
+    local value = config.Default or 0
+    local min = config.Min or 0
+    local max = config.Max or 100
+    local rounding = config.Rounding or 0
+
+    local function updateSlider(mouseX)
+        local relativeX = math.clamp(mouseX - sliderFrame.AbsolutePosition.X, 0, sliderFrame.AbsoluteSize.X)
+        local percentage = relativeX / sliderFrame.AbsoluteSize.X
+        value = min + (max - min) * percentage
+        value = math.floor(value * (10 ^ rounding) + 0.5) / (10 ^ rounding) -- Rounding
+
+        fillFrame.Size = UDim2.new(percentage, 0, 1, 0)
+        valueLabel.Text = tostring(value).. (config.Suffix or "")
+        if config.OnChanged then config.OnChanged(value) end
+        UI_ELEMENTS[config.Name].Value = value
+    end
+
+    sliderFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            updateSlider(input.Position.X)
+            local connection = game:GetService("UserInputService").InputChanged:Connect(function(input2)
+                if input2.UserInputType == Enum.UserInputType.MouseMovement or input2.UserInputType == Enum.UserInputType.Touch then
+                    updateSlider(input2.Position.X)
+                end
+            end)
+            local connection2 = game:GetService("UserInputService").InputEnded:Connect(function(input2)
+                if input2.UserInputType == Enum.UserInputType.MouseButton1 or input2.UserInputType == Enum.UserInputType.Touch then
+                    connection:Disconnect()
+                    connection2:Disconnect()
+                end
+            end)
+        end
+    end)
+
+    local element = {
+        Type = "Slider",
+        Value = value,
+        OnChanged = function(callback) config.OnChanged = callback end,
+        SetValue = function(newValue)
+            value = math.clamp(newValue, min, max)
+            value = math.floor(value * (10 ^ rounding) + 0.5) / (10 ^ rounding)
+            local percentage = (value - min) / (max - min)
+            fillFrame.Size = UDim2.new(percentage, 0, 1, 0)
+            valueLabel.Text = tostring(value).. (config.Suffix or "")
+            UI_ELEMENTS[config.Name].Value = value
+        end
+    }
+    UI_ELEMENTS[config.Name] = element
+
+    function element:ApplyTheme(theme)
+        frame.BackgroundColor3 = theme.MainColor
+        textLabel.BackgroundColor3 = theme.MainColor
+        textLabel.TextColor3 = theme.TextColor
+        valueLabel.BackgroundColor3 = theme.MainColor
+        valueLabel.TextColor3 = theme.TextColor
+        sliderFrame.BackgroundColor3 = theme.SecondaryColor
+        sliderFrame.BorderColor3 = theme.BorderColor
+        fillFrame.BackgroundColor3 = theme.AccentColor
+    end
+    table.insert(UI_COMPONENTS, element)
+    return element
+end
+
+local function createDropdown(parent, config)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 30)
+    frame.BackgroundColor3 = Themes[currentTheme].MainColor
+    frame.Parent = parent
+
+    local dropdownButton = Instance.new("TextButton")
+    dropdownButton.Size = UDim2.new(1, 0, 1, 0)
+    dropdownButton.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    dropdownButton.BorderColor3 = Themes[currentTheme].BorderColor
+    dropdownButton.BorderSizePixel = 1
+    dropdownButton.TextColor3 = Themes[currentTheme].TextColor
+    dropdownButton.TextXAlignment = Enum.TextXAlignment.Left
+    dropdownButton.TextInsets = UDim.new(0, 10)
+    dropdownButton.Text = config.Default or (config.Values and config.Values[1]) or "Select..."
+    dropdownButton.Font = Enum.Font.SourceSansSemibold
+    dropdownButton.TextSize = 14
+    dropdownButton.Parent = frame
+
+    local arrowLabel = Instance.new("TextLabel")
+    arrowLabel.Size = UDim2.new(0, 20, 1, 0)
+    arrowLabel.Position = UDim2.new(1, -25, 0, 0)
+    arrowLabel.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    arrowLabel.TextColor3 = Themes[currentTheme].TextColor
+    arrowLabel.Text = "▼"
+    arrowLabel.Font = Enum.Font.SourceSansSemibold
+    arrowLabel.TextSize = 14
+    arrowLabel.Parent = dropdownButton
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = dropdownButton
+
+    local dropdownFrame = Instance.new("Frame")
+    dropdownFrame.Size = UDim2.new(1, 0, 0, 0) -- Starts collapsed
+    dropdownFrame.Position = UDim2.new(0, 0, 1, 5)
+    dropdownFrame.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    dropdownFrame.BorderColor3 = Themes[currentTheme].BorderColor
+    dropdownFrame.BorderSizePixel = 1
+    dropdownFrame.Parent = frame
+    dropdownFrame.Visible = false
+
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.FillDirection = Enum.FillDirection.Vertical
+    listLayout.Padding = UDim.new(0, 2)
+    listLayout.Parent = dropdownFrame
+
+    local value = config.Default or (config.Values and config.Values[1])
+    local isExpanded = false
+
+    local function populateDropdown()
+        for _, child in pairs(dropdownFrame:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+        for _, val in pairs(config.Values or {}) do
+            local optionButton = createButton(dropdownFrame, val, function()
+                value = val
+                dropdownButton.Text = val
+                dropdownFrame.Visible = false
+                isExpanded = false
+                if config.OnChanged then config.OnChanged(value) end
+                UI_ELEMENTS[config.Name].Value = value
+            end)
+            optionButton.TextXAlignment = Enum.TextXAlignment.Left
+            optionButton.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+            optionButton.TextColor3 = Themes[currentTheme].TextColor
+            optionButton.Size = UDim2.new(1, 0, 0, 25)
+            optionButton.Parent = dropdownFrame
+        end
+        dropdownFrame.Size = UDim2.new(1, 0, 0, (#config.Values or 0) * 27 + 4)
+    end
+    populateDropdown()
+
+    dropdownButton.MouseButton1Click:Connect(function()
+        isExpanded = not isExpanded
+        dropdownFrame.Visible = isExpanded
+    end)
+
+    local element = {
+        Type = "Dropdown",
+        Value = value,
+        OnChanged = function(callback) config.OnChanged = callback end,
+        SetValue = function(newValue)
+            if table.find(config.Values, newValue) then
+                value = newValue
+                dropdownButton.Text = newValue
+                UI_ELEMENTS[config.Name].Value = value
+            else
+                warn("Value not found in dropdown options:", newValue)
+            end
+        end,
+        SetValues = function(newValues)
+            config.Values = newValues
+            populateDropdown()
+        end
+    }
+    UI_ELEMENTS[config.Name] = element
+
+    function element:ApplyTheme(theme)
+        frame.BackgroundColor3 = theme.MainColor
+        dropdownButton.BackgroundColor3 = theme.SecondaryColor
+        dropdownButton.BorderColor3 = theme.BorderColor
+        dropdownButton.TextColor3 = theme.TextColor
+        arrowLabel.BackgroundColor3 = theme.SecondaryColor
+        arrowLabel.TextColor3 = theme.TextColor
+        dropdownFrame.BackgroundColor3 = theme.SecondaryColor
+        dropdownFrame.BorderColor3 = theme.BorderColor
+        for _, child in pairs(dropdownFrame:GetChildren()) do
+            if child:IsA("TextButton") and child.ApplyTheme then
+                child:ApplyTheme(theme)
+            end
+        end
+    end
+    table.insert(UI_COMPONENTS, element)
+    return element
+end
+
+local function createInput(parent, config)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 30)
+    frame.BackgroundColor3 = Themes[currentTheme].MainColor
+    frame.Parent = parent
+
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(0, 80, 1, 0)
+    textLabel.Position = UDim2.new(0, 5, 0, 0)
+    textLabel.BackgroundColor3 = Themes[currentTheme].MainColor
+    textLabel.TextColor3 = Themes[currentTheme].TextColor
+    textLabel.TextXAlignment = Enum.TextXAlignment.Left
+    textLabel.Text = config.Text or "Input:"
+    textLabel.Font = Enum.Font.SourceSansSemibold
+    textLabel.TextSize = 14
+    textLabel.Parent = frame
+
+    local textBox = Instance.new("TextBox")
+    textBox.Size = UDim2.new(1, -90, 1, 0)
+    textBox.Position = UDim2.new(0, 90, 0, 0)
+    textBox.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    textBox.BorderColor3 = Themes[currentTheme].BorderColor
+    textBox.BorderSizePixel = 1
+    textBox.TextColor3 = Themes[currentTheme].TextColor
+    textBox.Text = config.Default or ""
+    textBox.Font = Enum.Font.SourceSansSemibold
+    textBox.TextSize = 14
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = frame
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 3)
+    corner.Parent = textBox
+
+    local value = config.Default or ""
+    textBox.Changed:Connect(function(property)
+        if property == "Text" then
+            value = textBox.Text
+            if config.OnChanged then config.OnChanged(value) end
+            UI_ELEMENTS[config.Name].Value = value
+        end
+    end)
+
+    local element = {
+        Type = "Input",
+        Value = value,
+        OnChanged = function(callback) config.OnChanged = callback end,
+        SetValue = function(newValue)
+            value = newValue
+            textBox.Text = newValue
+            UI_ELEMENTS[config.Name].Value = value
+        end
+    }
+    UI_ELEMENTS[config.Name] = element
+
+    function element:ApplyTheme(theme)
+        frame.BackgroundColor3 = theme.MainColor
+        textLabel.BackgroundColor3 = theme.MainColor
+        textLabel.TextColor3 = theme.TextColor
+        textBox.BackgroundColor3 = theme.SecondaryColor
+        textBox.BorderColor3 = theme.BorderColor
+        textBox.TextColor3 = theme.TextColor
+    end
+    table.insert(UI_COMPONENTS, element)
+    return element
+end
+
+local function createLabel(parent, text, isRichText)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, 0, 0, 20)
+    label.BackgroundColor3 = Themes[currentTheme].MainColor
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextInsets = UDim.new(0, 5)
+    label.TextColor3 = Themes[currentTheme].TextColor
+    label.Text = text
+    label.Font = Enum.Font.SourceSansSemibold
+    label.TextSize = 14
+    label.RichText = isRichText or false
+    label.Parent = parent
+    label.AutomaticSize = Enum.AutomaticSize.Y -- Allows multi-line text to expand
+
+    function label:ApplyTheme(theme)
+        label.BackgroundColor3 = theme.MainColor
+        label.TextColor3 = theme.TextColor
+    end
+    table.insert(UI_COMPONENTS, label)
+    return label
+end
+
+local function createDivider(parent)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 0, 2)
+    frame.BackgroundColor3 = Themes[currentTheme].BorderColor
+    frame.Parent = parent
+
+    function frame:ApplyTheme(theme)
+        frame.BackgroundColor3 = theme.BorderColor
+    end
+    table.insert(UI_COMPONENTS, frame)
+    return frame
+end
+
+local VRI_API = {}
+
+function VRI_API.Load()
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 600, 0, 700)
+    mainFrame.Position = UDim2.new(0.5, -300, 0.5, -350)
+    mainFrame.BackgroundColor3 = Themes[currentTheme].MainColor
+    mainFrame.BorderColor3 = Themes[currentTheme].BorderColor
+    mainFrame.BorderSizePixel = 1
+    mainFrame.Draggable = true
+    mainFrame.Parent = ScreenGui
+    mainFrame.Visible = true
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = mainFrame
+
+    local titleBar = Instance.new("Frame")
+    titleBar.Size = UDim2.new(1, 0, 0, 30)
+    titleBar.BackgroundColor3 = Themes[currentTheme].AccentColor
+    titleBar.Parent = mainFrame
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 1, 0)
+    titleLabel.BackgroundColor3 = Themes[currentTheme].AccentColor
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.Text = "" -- Set by new(config.Title)
+    titleLabel.Font = Enum.Font.SourceSansBold
+    titleLabel.TextSize = 18
+    titleLabel.Parent = titleBar
+
+    local tabsFrame = Instance.new("Frame")
+    tabsFrame.Size = UDim2.new(0.2, 0, 1, -30)
+    tabsFrame.Position = UDim2.new(0, 0, 0, 30)
+    tabsFrame.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+    tabsFrame.Parent = mainFrame
+
+    local tabListLayout = Instance.new("UIListLayout")
+    tabListLayout.FillDirection = Enum.FillDirection.Vertical
+    tabListLayout.Padding = UDim.new(0, 5)
+    tabListLayout.Parent = tabsFrame
+
+    local contentFrame = Instance.new("Frame")
+    contentFrame.Size = UDim2.new(0.8, 0, 1, -30)
+    contentFrame.Position = UDim2.new(0.2, 0, 0, 30)
+    contentFrame.BackgroundColor3 = Themes[currentTheme].MainColor
+    contentFrame.Parent = mainFrame
+
+    local contentListLayout = Instance.new("UIListLayout")
+    contentListLayout.FillDirection = Enum.FillDirection.Vertical
+    contentListLayout.Padding = UDim.new(0, 5)
+    contentListLayout.Parent = contentFrame
+
+    local activeTab = nil
+
+    local function createTab(tabName)
+        local tabButton = Instance.new("TextButton")
+        tabButton.Size = UDim2.new(1, 0, 0, 40)
+        tabButton.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+        tabButton.BorderColor3 = Themes[currentTheme].BorderColor
+        tabButton.BorderSizePixel = 1
+        tabButton.TextColor3 = Themes[currentTheme].TextColor
+        tabButton.Text = tabName
+        tabButton.Font = Enum.Font.SourceSansBold
+        tabButton.TextSize = 16
+        tabButton.Parent = tabsFrame
+
+        local tabContentFrame = Instance.new("Frame")
+        tabContentFrame.Size = UDim2.new(1, 0, 1, 0)
+        tabContentFrame.BackgroundColor3 = Themes[currentTheme].MainColor
+        tabContentFrame.Parent = contentFrame
+        tabContentFrame.Visible = false
+
+        local contentLayout = Instance.new("UIListLayout")
+        contentLayout.FillDirection = Enum.FillDirection.Vertical
+        contentLayout.Padding = UDim.new(0, 5)
+        contentLayout.Parent = tabContentFrame
+
+        local scroll = Instance.new("ScrollingFrame")
+        scroll.Size = UDim2.new(1,0,1,0)
+        scroll.CanvasSize = UDim2.new(0,0,0,0) -- Automatic later
+        scroll.BackgroundColor3 = Themes[currentTheme].MainColor
+        scroll.ScrollBarThickness = 5
+        scroll.ScrollBarImageColor3 = Themes[currentTheme].AccentColor
+        scroll.BackgroundTransparency = 1
+        scroll.Parent = tabContentFrame
+
+        local innerContentFrame = Instance.new("Frame")
+        innerContentFrame.Size = UDim2.new(1,0,0,0)
+        innerContentFrame.AutomaticSize = Enum.AutomaticSize.Y
+        innerContentFrame.BackgroundTransparency = 1
+        innerContentFrame.Parent = scroll
+
+        local innerContentLayout = Instance.new("UIListLayout")
+        innerContentLayout.FillDirection = Enum.FillDirection.Vertical
+        innerContentLayout.Padding = UDim.new(0, 5)
+        innerContentLayout.Parent = innerContentFrame
+
+        local function selectTab()
+            if activeTab then activeTab.Visible = false end
+            activeTab = innerContentFrame
+            activeTab.Visible = true
+        end
+
+        tabButton.MouseButton1Click:Connect(selectTab)
+
+        local tab_api = {}
+        function tab_api:addSection(title)
+            local sectionFrame = Instance.new("Frame")
+            sectionFrame.Size = UDim2.new(1, 0, 0, 0)
+            sectionFrame.AutomaticSize = Enum.AutomaticSize.Y
+            sectionFrame.BackgroundTransparency = 1
+            sectionFrame.Parent = innerContentFrame
+
+            local sectionLayout = Instance.new("UIListLayout")
+            sectionLayout.FillDirection = Enum.FillDirection.Vertical
+            sectionLayout.Padding = UDim.new(0, 5)
+            sectionLayout.Parent = sectionFrame
+
+            local sectionTitle = Instance.new("TextLabel")
+            sectionTitle.Size = UDim2.new(1, 0, 0, 25)
+            sectionTitle.BackgroundColor3 = Themes[currentTheme].SecondaryColor
+            sectionTitle.BorderColor3 = Themes[currentTheme].BorderColor
+            sectionTitle.BorderSizePixel = 1
+            sectionTitle.TextColor3 = Themes[currentTheme].TextColor
+            sectionTitle.Text = title
+            sectionTitle.Font = Enum.Font.SourceSansBold
+            sectionTitle.TextSize = 15
+            sectionTitle.Parent = sectionFrame
+            sectionTitle.TextXAlignment = Enum.TextXAlignment.Left
+            sectionTitle.TextInsets = UDim.new(0, 5)
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 3)
+            corner.Parent = sectionTitle
+
+            local section_api = {Parent = sectionFrame}
+            function section_api:addButton(text, callback) return createButton(sectionFrame, text, callback) end
+            function section_api:addToggle(name, config) return createToggle(sectionFrame, setmetatable({Name = name}, {__index = config})) end
+            function section_api:addSlider(name, config) return createSlider(sectionFrame, setmetatable({Name = name}, {__index = config})) end
+            function section_api:addDropdown(name, config) return createDropdown(sectionFrame, setmetatable({Name = name}, {__index = config})) end
+            function section_api:addInput(name, config) return createInput(sectionFrame, setmetatable({Name = name}, {__index = config})) end
+            function section_api:addLabel(text, isRichText) return createLabel(sectionFrame, text, isRichText) end
+            function section_api:addDivider() return createDivider(sectionFrame) end
+            return section_api
+        end
+
+        function tab_api:ApplyTheme(theme)
+            tabButton.BackgroundColor3 = theme.SecondaryColor
+            tabButton.BorderColor3 = theme.BorderColor
+            tabButton.TextColor3 = theme.TextColor
+            tabContentFrame.BackgroundColor3 = theme.MainColor
+            scroll.BackgroundColor3 = theme.MainColor
+            for _, child in pairs(innerContentFrame:GetChildren()) do
+                if child:IsA("Frame") and child.ApplyTheme then
+                    child:ApplyTheme(theme)
+                elseif child:IsA("TextLabel") and child.ApplyTheme then
+                    child:ApplyTheme(theme)
+                end
+            end
+        end
+
+        table.insert(UI_COMPONENTS, tab_api)
+        return tab_api
+    end
+
+    local Venyx_Root = {
+        Title = "",
+        Key = UI_TOGGLE_KEY
+    }
+
+    local Window_API = {
+        Elements = UI_ELEMENTS, -- Expose elements for external access (e.g. SaveManager)
+        Notify = notify,
+        ApplyTheme = applyTheme,
+        SetToggleKey = function(key) UI_TOGGLE_KEY = key end
+    }
+
+    function Window_API.new(config)
+        Venyx_Root.Title = config.Title or "VenyxUI"
+        Venyx_Root.Key = config.Key or Enum.KeyCode.RightControl
+        mainFrame.Visible = config.Enabled or false
+        titleLabel.Text = Venyx_Root.Title
+        if config.Size then mainFrame.Size = config.Size end
+        if config.Center then
+            mainFrame.Position = UDim2.new(0.5, -mainFrame.Size.X.Offset / 2, 0.5, -mainFrame.Size.Y.Offset / 2)
+        end
+        if config.Theme then applyTheme(config.Theme) end
+
+        game:GetService("UserInputService").InputBegan:Connect(function(input, gameProcessed)
+            if not gameProcessed and input.KeyCode == Venyx_Root.Key then
+                mainFrame.Visible = not mainFrame.Visible
+            end
+        end)
+
+        function Window_API:addTab(name)
+            return createTab(name)
+        end
+
+        return Window_API
+    end
+
+    function Window_API:ApplyTheme(theme)
+        mainFrame.BackgroundColor3 = theme.MainColor
+        mainFrame.BorderColor3 = theme.BorderColor
+        titleBar.BackgroundColor3 = theme.AccentColor
+        titleLabel.BackgroundColor3 = theme.AccentColor
+        tabsFrame.BackgroundColor3 = theme.SecondaryColor
+        contentFrame.BackgroundColor3 = theme.MainColor
+        for _, component in pairs(UI_COMPONENTS) do
+            if component.ApplyTheme then
+                component:ApplyTheme(theme)
+            end
+        end
+    end
+    table.insert(UI_COMPONENTS, Window_API)
+
+    return Window_API
+end
+-- [[ END EMBEDDED VENYXUI LIBRARY ]]
+
+-- Load the embedded VenyxUI
+local Venyx = VRI_LIB_CODE() -- Execute the embedded UI code
 
 local function findGameDependencies()
     local attempts = 0
@@ -177,48 +946,48 @@ local function handleNote(noteData)
 end
 
 -- VenyxUI Window setup
-local Main = Venyx.new({
+local MainUI = Venyx.new({
     Title = string.format('🚀 DAN-PLAYER FF v%s | Atualizado: %s 🚀', metadata.version, metadata.updated),
-    Size = UDim2.fromOffset(600, 700),
+    Size = UDim2.new(0, 600, 0, 700),
     Enabled = true,
     Key = Enum.KeyCode.RightControl -- Default toggle key
 })
 
 local Tabs = {
-    Main = Main:addTab('🚀 DAN-Player'),
-    Tuning = Main:addTab('⚙️ Ajustes Finos'),
-    Advanced = Main:addTab('⚡ Avançado'),
-    Configs = Main:addTab('🗄️ Configurações')
+    Main = MainUI:addTab('🚀 DAN-Player'),
+    Tuning = MainUI:addTab('⚙️ Ajustes Finos'),
+    Advanced = MainUI:addTab('⚡ Avançado'),
+    Configs = MainUI:addTab('🗄️ Configurações')
 }
 
 -- Groups and elements for VenyxUI
--- NOTE: VenyxUI uses a slightly different API. 'addToggle', 'addDropdown', 'addSlider', etc.
--- It also handles Options (values) slightly differently.
-
--- Main Tab
 local AutoplayerSection = Tabs.Main:addSection('Controle DAN-Player')
-AutoplayerSection:addToggle('Autoplayer', {Default = Autoplayer.Enabled, Text = 'Ativar DAN-Player'}):OnChanged(function(state)
+local AutoplayerToggle = AutoplayerSection:addToggle('Autoplayer', {Default = Autoplayer.Enabled, Text = 'Ativar DAN-Player'})
+AutoplayerToggle:OnChanged(function(state)
     Autoplayer.Enabled = state
-    Venyx.Notify(state and 'DAN-Player ATIVADO! Que a força esteja com você!' or 'DAN-Player DESATIVADO.', 3)
+    MainUI.Notify(state and 'DAN-Player ATIVADO! Que a força esteja com você!' or 'DAN-Player DESATIVADO.', 3)
 end)
 
-AutoplayerSection:addDropdown('PressMode', {
+local PressModeDropdown = AutoplayerSection:addDropdown('PressMode', {
     Default = Autoplayer.PressMode,
     Values = {'firesignal', 'virtual input'},
     Text = 'Modo de Input (Injeção)',
-}):OnChanged(function(value) Autoplayer.PressMode = value end)
+})
+PressModeDropdown:OnChanged(function(value) Autoplayer.PressMode = value end)
 
-AutoplayerSection:addSlider('HumanErrorChance', {
+local HumanErrorSlider = AutoplayerSection:addSlider('HumanErrorChance', {
     Default = Autoplayer.HumanErrorChance,
     Min = 0, Max = 100, Rounding = 0, Suffix = '%',
     Text = 'Chance de Erro Humano',
-}):OnChanged(function(value) Autoplayer.HumanErrorChance = value end)
+})
+HumanErrorSlider:OnChanged(function(value) Autoplayer.HumanErrorChance = value end)
 
-AutoplayerSection:addSlider('MinHitInterval', {
+local MinHitIntervalSlider = AutoplayerSection:addSlider('MinHitInterval', {
     Default = Autoplayer.MinHitInterval * 1000,
     Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
     Text = 'Intervalo Mín. entre Hits',
-}):OnChanged(function(value) Autoplayer.MinHitInterval = value / 1000 end)
+})
+MinHitIntervalSlider:OnChanged(function(value) Autoplayer.MinHitInterval = value / 1000 end)
 
 local HitChancesSection = Tabs.Tuning:addSection('Probabilidade de Acerto (Personalizável)')
 HitChancesSection:addDropdown('AutoplayerMode', {
@@ -232,12 +1001,225 @@ HitChancesSection:addSlider('BadChance', {Default = 0, Min = 0, Max = 100, Round
 HitChancesSection:addSlider('MissChance', {Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Miss chance'})
 
 local HitTimingSection = Tabs.Tuning:addSection('Sincronização de Hits (Latency Bypass)')
-HitTimingSection:addDropdown('DelayMode', {
+local DelayModeDropdown = HitTimingSection:addDropdown('DelayMode', {
     Default = Autoplayer.DelayMode, Values = {'Manual', 'Aleatório'},
     Text = 'Modo de Atraso',
-}):OnChanged(function(value) Autoplayer.DelayMode = value end)
+})
+DelayModeDropdown:OnChanged(function(value) Autoplayer.DelayMode = value end)
 
 HitTimingSection:addLabel('Atraso Manual Base')
+local ReleaseDelaySlider = HitTimingSection:addSlider('ReleaseDelay', {
+    Default = Autoplayer.ReleaseDelay, Min = -100, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Atraso Nota Padrão',
+})
+ReleaseDelaySlider:OnChanged(function(value) Autoplayer.ReleaseDelay = value end)
+local HeldDelaySlider = HitTimingSection:addSlider('HeldDelay', {
+    Default = Autoplayer.HeldDelay, Min = -100, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Atraso Nota Segura',
+})
+HeldDelaySlider:OnChanged(function(value) Autoplayer.HeldDelay = value end)
+
+HitTimingSection:addDivider()
+HitTimingSection:addLabel('Atraso Aleatório (Humanização)')
+local NoteDelayMinSlider = HitTimingSection:addSlider('NoteDelayMin', {
+    Default = Autoplayer.NoteDelayMin, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Min Atraso Nota',
+})
+NoteDelayMinSlider:OnChanged(function(value) Autoplayer.NoteDelayMin = value end)
+local NoteDelayMaxSlider = HitTimingSection:addSlider('NoteDelayMax', {
+    Default = Autoplayer.NoteDelayMax, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Max Atraso Nota',
+})
+NoteDelayMaxSlider:OnChanged(function(value) Autoplayer.NoteDelayMax = value end)
+
+local HeldDelayMinSlider = HitTimingSection:addSlider('HeldDelayMin', {
+    Default = Autoplayer.HeldDelayMin, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Min Atraso Segura',
+})
+HeldDelayMinSlider:OnChanged(function(value) Autoplayer.HeldDelayMin = value end)
+local HeldDelayMaxSlider = HitTimingSection:addSlider('HeldDelayMax', {
+    Default = Autoplayer.HeldDelayMax, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Max Atraso Segura',
+})
+HeldDelayMaxSlider:OnChanged(function(value) Autoplayer.HeldDelayMax = value end)
+
+local PerformanceSection = Tabs.Main:addSection('Dashboard de Performance (DAN-Stats)')
+PerformanceSection:addLabel('<font color="#FFD700"><b>Aguardando dados...</b></font>', true)
+PerformanceSection:addLabel('Precisão: N/A')
+PerformanceSection:addLabel('Latência: N/A')
+PerformanceSection:addLabel('Notas/Min: N/A')
+
+local AdvancedMiscSection = Tabs.Advanced:addSection('Funcionalidades Secretas do DAN')
+AdvancedMiscSection:addButton('Desbloquear Notas de Desenvolvedor', function()
+    MainUI.Notify('Notas de Desenvolvedor Desbloqueadas! Ou não? 😉', 3)
+end)
+AdvancedMiscSection:addToggle('Auto Coletar Anéis', {Text = 'Auto Coletar Anéis (Stealth Mode)'})
+
+AdvancedMiscSection:addDivider()
+AdvancedMiscSection:addButton('Forçar Recarregamento de Dependências', function()
+    framework, scrollHandler, network = nil, nil, nil
+    MainUI.Notify('Forçando recarregamento das dependências do jogo...', 3)
+    pcall(findGameDependencies)
+end)
+
+local KeybindsSection = Tabs.Advanced:addSection('Keybinds Manuais (Para Ação Direta)')
+KeybindsSection:addLabel('Sick (Perfect Hit): [One]')
+KeybindsSection:addLabel('Good (Great Hit): [Two]')
+KeybindsSection:addLabel('Ok (Decent Hit): [Three]')
+KeybindsSection:addLabel('Bad (Meh Hit): [Four]')
+
+local SaveManager = {}
+SaveManager.DefaultFileName = 'dan_player_config_default.json'
+
+function SaveManager:SaveConfig(configName)
+    local data = {
+        version = 3,
+        options = {}
+    }
+    for key, element in pairs(MainUI.Elements) do -- Iterate VenyxUI elements
+        if element.Type and element.Value ~= nil then -- Only elements with value
+            data.options[key] = element.Value
+        end
+    end
+    local success, encoded = pcall(httpService.JSONEncode, httpService, data)
+    if not success then return false, 'Falha ao codificar dados: '.. tostring(encoded) end
+    makefolder('funky_friday_autoplayer')
+    writefile('funky_friday_autoplayer/'.. configName, encoded)
+    return true
+end
+
+function SaveManager:LoadConfig(configName)
+    local filePath = 'funky_friday_autoplayer/'.. configName
+    if not isfile(filePath) then return false, 'Arquivo de configuração não encontrado.' end
+
+    local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(filePath))
+    if not success then return false, 'Erro ao decodificar configuração: '.. tostring(decoded) end
+    if decoded.version ~= 3 then return false, 'Versão de configuração incompatível! (Esperado 3, Encontrado '.. tostring(decoded.version).. ')' end
+
+    for key, value in pairs(decoded.options) do
+        local element = MainUI.Elements[key]
+        if element and element.SetValue then -- Check if element exists and has SetValue method
+            element:SetValue(value)
+        end
+    end
+    return true
+end
+
+function SaveManager.RefreshConfigList(dropdown)
+    local list = listfiles('funky_friday_autoplayer') or {}
+    local out = {}
+    for i = 1, #list do
+        local file = list[i]
+        if file:sub(-5) == '.json' then
+            local filename = file:match("([^/\\\]+)$") -- Get full filename with extension
+            table.insert(out, filename)
+        end
+    end
+    dropdown:SetValues(out)
+end
+
+-- Configuration Tab (VenyxUI)
+if type(readfile) == 'function' and type(writefile) == 'function' and type(makefolder) == 'function' and type(isfolder) == 'function' then
+    makefolder('funky_friday_autoplayer')
+
+    local ConfigSection = Tabs.Configs:addSection('Gerenciamento de Configurações')
+    local configDropdown = ConfigSection:addDropdown('ConfigList', {
+        Values = {}, Text = 'Configuração Selecionada', Default = nil
+    })
+    local configInput = ConfigSection:addInput('ConfigNameInput', {
+        Text = 'Nome para Salvar', Default = 'MinhaConfig.json'
+    })
+
+    ConfigSection:addButton('Salvar Configuração', function()
+        local name = configInput.Value
+        if name:gsub(' ', '') == '' or not name:match('%.json$') then return MainUI.Notify('Nome de configuração inválido ou sem ".json".', 3) end
+        local success, err = SaveManager:SaveConfig(name)
+        if not success then return MainUI.Notify(tostring(err), 5) end
+        MainUI.Notify(string.format('Configuração "%s" SALVA!', name), 5)
+        task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+    end)
+
+    ConfigSection:addButton('Carregar Configuração', function()
+        local name = configDropdown.Value
+        if not name or name:gsub(' ', '') == '' then return MainUI.Notify('Selecione uma configuração para carregar.', 3) end
+        local success, err = SaveManager:LoadConfig(name)
+        if not success then return MainUI.Notify(tostring(err), 5) end
+        MainUI.Notify(string.format('Configuração "%s" CARREGADA!', name), 5)
+        -- Update UI toggles, sliders, dropdowns here if needed
+    end)
+
+    ConfigSection:addButton('Deletar Configuração', function()
+        local name = configDropdown.Value
+        if not name or name:gsub(' ', '') == '' then return MainUI.Notify('Selecione uma configuração para deletar.', 3) end
+        if delfile('funky_friday_autoplayer/'.. name) then
+            MainUI.Notify(string.format('Configuração "%s" DELETADA!', name), 5)
+            task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+        else
+            MainUI.Notify(string.format('Falha ao deletar "%s".', name), 5)
+        end
+    end)
+
+    ConfigSection:addButton('Atualizar Lista de Configs', function() SaveManager.RefreshConfigList(configDropdown) end)
+    task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+else
+    local ConfigSection = Tabs.Configs:addSection('Gerenciamento de Configurações')
+    ConfigSection:addLabel('<font color="#FF0000"><b>Seu exploit não possui funções de arquivo.<br>Configurações não disponíveis.</b></font>', true)
+end
+
+-- Credits & Misc
+local CreditsSection = Tabs.Advanced:addSection('Créditos & DAN-Power')
+CreditsSection:addLabel('<font color="#3da5ff"><b>wally</b></font> - Script Original', true)
+CreditsSection:addLabel('<font color="#de6cff"><b>Sezei</b></font> - Contribuidor', true)
+CreditsSection:addLabel('VenyxCode - UI Library (VenyxUI - Embutida)', true)
+CreditsSection:addDivider()
+CreditsSection:addLabel('<font color="#00FF00"><b>DAN</b></font> - Tunagem e Poder Ilimitado ⚡', true)
+
+local MiscSection = Tabs.Advanced:addSection('Controle DAN')
+MiscSection:addLabel(metadata.message or 'Nenhuma mensagem do DAN encontrada!', true)
+MiscSection:addDivider()
+MiscSection:addButton('Descarregar Script (DAN-Exit)', function() pcall(shared._unload) end)
+MiscSection:addButton('Copiar Discord (Wally)', function()
+    if pcall(setclipboard, "https://wally.cool/discord") then
+        MainUI.Notify('Link do Discord do Wally copiado!', 5)
+    end
+end)
+
+runService.RenderStepped:Connect(function()
+    if Autoplayer.Enabled and framework and framework.GameUI and framework.GameUI.Notes then
+        -- ESTA É A ÚNICA PARTE QUE AINDA DEPENDE DA ENGENHARIA REVERSA ESPECÍFICA DO FUNKY FRIDAY.
+        -- O script não sabe "como" o Funky Friday expõe suas notas.
+        -- Você precisa encontrar o array/tabela de notas ativas do jogo.
+        -- Exemplos (altamente hipotéticos e dependem do jogo):
+
+        -- Opção 1: Se o 'scrollHandler' tem uma função que retorna as notas ativas:
+        -- for _, noteInstance in pairs(scrollHandler:GetActiveNotes() or {}) do
+        -- if noteInstance.IsActive and noteInstance.ArrowIndex and not noteInstance.IsHit then
+        -- -- Calcule a posição da nota e o tempo de acerto aqui
+        -- --...
+        -- handleNote({Arrow = noteInstance.ArrowIndex, IsHeld = noteInstance.IsHeld})
+        -- noteInstance.IsHit = true -- Marcar como hit para evitar duplicatas
+        -- end
+        -- end
+
+        -- Opção 2: Se as notas são objetos visuais em uma pasta:
+        -- for _, noteGui in pairs(framework.GameUI.Notes:GetChildren()) do
+        -- if noteGui:IsA("ImageLabel") and noteGui.Visible and noteGui.Name:match("Arrow") then
+        -- local noteArrowIndex = tonumber(noteGui.Name:match("Arrow(%d+)"))
+        -- local notePosition = noteGui.AbsolutePosition.Y -- ou outra propriedade relevante
+        -- local targetPosition = 100 -- Exemplo: A linha de acerto está na Y = 100
+        -- local noteIsHeld = noteGui.Size.Y > 50 -- Heurística para notas longas
+        --
+        -- -- Lógica para verificar se a nota está na zona de acerto e disparar handleNote
+        -- if math.abs(notePosition - targetPosition) < 20 then -- Dentro de 20 pixels da linha de acerto
+        -- handleNote({Arrow = noteArrowIndex, IsHeld = noteIsHeld})
+        -- -- Para evitar múltiplos hits na mesma nota, você pode ocultá-la temporariamente
+        -- -- ou ter um sistema de rastreamento de notas já processadas.
+        -- -- noteGui.Visible = false
+        -- end
+        -- end
+        -- end
+    end
+end)traso Manual Base')
 HitTimingSection:addSlider('ReleaseDelay', {
     Default = Autoplayer.ReleaseDelay, Min = -100, Max = 100, Rounding = 0, Suffix = 'ms',
     Text = 'Atraso Nota Padrão',

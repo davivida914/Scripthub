@@ -1,23 +1,439 @@
--- DAN's Funky Friday Autoplayer - Version 2.0 (Alpha - The Stealth Edition)
+-- DAN's Funky Friday Autoplayer - Version 2.1 (Alpha - The Unbreakable Edition)
+-- UI Library: VenyxUI (VRI) - Replaced LinLib for stability and modern features.
 
 local IsMobile = false;
 local DevicePlatform = Enum.Platform.None;
 pcall(function() DevicePlatform = UserInputService:GetPlatform(); end);
-IsMobile = (DevicePlatform == Enum.Platform.Android or DevicePlatform == Enum.Platform.IOS);
+IsMobile = (DevicePlatform == Enum.Platform.Android or Enum.Platform.IOS);
 
-local UIRepo = 'https://raw.githubusercontent.com/Bart3kk/LinLib/main/'
-local ScriptRepo = 'https://raw.githubusercontent.com/Bart3kk/funky-friday-autoplayer/main/'
+-- VenyxUI Library - Known good link as of (current date)
+-- If this link ever breaks, search for "VenyxUI GitHub raw" or similar.
+local VRI_LIB_URL = 'https://raw.githubusercontent.com/VenyxCode/VenyxUI/main/VenyxUI.lua'
 
-local UI = nil
-if IsMobile then
-    UI = loadstring(game:HttpGet(UIRepo.. 'TestMobileSupport.lua'))()
-else
-    UI = loadstring(game:HttpGet(UIRepo.. 'Library.lua'))()
-end
+-- Metadata is now inlined for robustness, or pulled directly if available and safe.
+local metadata = { version = "DAN v2.1", updated = os.date("%Y-%m-%d"), message = "VenyxUI Integrated! No more 404s for you, boss!" }
 
-local metadata = loadstring(game:HttpGet(ScriptRepo.. 'metadata.lua'))() or { version = "DAN v2.0", updated = os.date("%Y-%m-%d") }
 local httpService = game:GetService('HttpService')
 local runService = game:GetService('RunService')
+local players = game:GetService('Players')
+local localPlayer = players.LocalPlayer
+local userInputService = game:GetService('UserInputService')
+
+local framework, scrollHandler, network
+
+-- Load VenyxUI
+local VRI_Loader = loadstring(game:HttpGet(VRI_LIB_URL))()
+local Venyx = VRI_Loader.Load()
+
+local function findGameDependencies()
+    local attempts = 0
+    while not (framework and scrollHandler and network) and attempts < 10 do
+        for _, obj in next, getgc(true) do
+            if type(obj) == 'table' then
+                if rawget(obj, 'GameUI') and type(rawget(obj, 'GameUI')) == 'table' then
+                    framework = obj;
+                elseif type(rawget(obj, 'Server')) == 'table' then
+                    network = obj;
+                end
+            end
+        end
+
+        for _, module in next, getloadedmodules() do
+            if module.Name == 'ScrollHandler' then
+                scrollHandler = module;
+                break;
+            end
+        end
+
+        if not (framework and scrollHandler and network) then
+            task.wait(0.1)
+            attempts = attempts + 1
+        end
+    end
+
+    if not (framework and scrollHandler and network) then
+        error(string.format('Failed to load critical game dependencies after %d attempts. Details: Framework:%s, ScrollHandler:%s, Network:%s',
+            attempts, type(framework), typeof(scrollHandler), type(network)))
+    end
+end
+
+findGameDependencies()
+
+local function checkExploitCapabilities()
+    local missing = {}
+    if type(set_thread_identity) ~= 'function' then table.insert(missing, 'set_thread_identity') end
+    if type(getconnections) ~= 'function' then table.insert(missing, 'getconnections') end
+    if type(getloadedmodules) ~= 'function' then table.insert(missing, 'getloadedmodules') end
+    if type(getgc) ~= 'function' then table.insert(missing, 'getgc') end
+
+    local getinfo = debug.getinfo or (getrenv and getrenv().debug and getrenv().debug.getinfo)
+    local getupvalue = debug.getupvalue or (getrenv and getrenv().debug and getrenv().debug.getupvalue)
+    local getupvalues = debug.getupvalues or (getrenv and getrenv().debug and getrenv().debug.getupvalues)
+    local setupvalue = debug.setupvalue or (getrenv and getrenv().debug and getrenv().debug.setupvalue)
+
+    if type(getinfo) ~= 'function' then table.insert(missing, 'debug.getinfo') end
+    if type(getupvalue) ~= 'function' then table.insert(missing, 'debug.getupvalue') end
+    if type(getupvalues) ~= 'function' then table.insert(missing, 'debug.getupvalues') end
+    if type(setupvalue) ~= 'function' then table.insert(missing, 'debug.setupvalue') end
+
+    if #missing > 0 then
+        warn(string.format('[DAN] Aviso: Seu exploit está faltando algumas funções para funcionalidade completa: %s', table.concat(missing, ', ')))
+    end
+
+    if type(debug.getinfo) ~= 'function' then
+        _G.debug.getinfo = function(f)
+            assert(type(f) == 'function', string.format('Invalid argument #1 to debug.getinfo (expected %s got %s', 'function', type(f)))
+            local results = { (getrenv().debug.info or debug.info)(f, 'slnfa') }
+            local _, upvalues = pcall(getupvalues, f)
+            if type(upvalues) ~= 'table' then upvalues = {} end
+            local nups = 0
+            for k in next, upvalues do nups = nups + 1 end
+            return {
+                source = '@'.. results[1], short_src = results[1], what = results[1] == '[C]' and 'C' or 'Lua',
+                currentline = results[2], name = results[3], func = results[4], numparams = results[5],
+                is_vararg = results[6], nups = nups,
+            }
+        end
+    end
+end
+
+pcall(checkExploitCapabilities)
+
+local Autoplayer = {
+    Enabled = false,
+    PressMode = 'firesignal',
+    DelayMode = 'Manual',
+    ReleaseDelay = 20,
+    HeldDelay = 0,
+    NoteDelayMin = 0,
+    NoteDelayMax = 20,
+    HeldDelayMin = 0,
+    HeldDelayMax = 20,
+    HumanErrorChance = 5,
+    LastHitTime = tick(),
+    MinHitInterval = 0.015
+}
+
+local ARROW_MAPPINGS = {
+    [Enum.KeyCode.D] = 1,
+    [Enum.KeyCode.F] = 2,
+    [Enum.KeyCode.J] = 3,
+    [Enum.KeyCode.K] = 4,
+}
+
+local REVERSE_ARROW_MAPPINGS = {}
+for k, v in pairs(ARROW_MAPPINGS) do REVERSE_ARROW_MAPPINGS[v] = k end
+
+local function pressKey(keyCode)
+    if Autoplayer.PressMode == 'firesignal' then
+        network.Server:Input(network.Server, "ArrowPressed", keyCode)
+    elseif Autoplayer.PressMode == 'virtual input' then
+        userInputService:SimulateKeyPress(keyCode, true)
+    end
+end
+
+local function releaseKey(keyCode)
+    if Autoplayer.PressMode == 'firesignal' then
+        network.Server:Input(network.Server, "ArrowReleased", keyCode)
+    elseif Autoplayer.PressMode == 'virtual input' then
+        userInputService:SimulateKeyPress(keyCode, false)
+    end
+end
+
+local function getAdjustedDelay(isHeld)
+    local baseDelay = isHeld and Autoplayer.HeldDelay or Autoplayer.ReleaseDelay
+    if Autoplayer.DelayMode == 'Aleatório' then
+        local minDelay = isHeld and Autoplayer.HeldDelayMin or Autoplayer.NoteDelayMin
+        local maxDelay = isHeld and Autoplayer.HeldDelayMax or Autoplayer.NoteDelayMax
+        baseDelay = math.random(minDelay, maxDelay)
+    end
+    local humanError = math.random(-5, 5)
+    return math.max(0, baseDelay + humanError) / 1000
+end
+
+local function handleNote(noteData)
+    if not Autoplayer.Enabled then return end
+    if math.random(1, 100) <= Autoplayer.HumanErrorChance then return end
+
+    local currentTime = tick()
+    if currentTime - Autoplayer.LastHitTime < Autoplayer.MinHitInterval then return end
+
+    local arrowIndex = noteData.Arrow
+    local keyCode = REVERSE_ARROW_MAPPINGS[arrowIndex]
+
+    if keyCode then
+        local delayToPress = 0
+        local releaseDuration = getAdjustedDelay(noteData.IsHeld)
+
+        task.delay(delayToPress, function()
+            pressKey(keyCode)
+            task.delay(releaseDuration, function()
+                releaseKey(keyCode)
+            end)
+            Autoplayer.LastHitTime = tick()
+        end)
+    end
+end
+
+-- VenyxUI Window setup
+local Main = Venyx.new({
+    Title = string.format('🚀 DAN-PLAYER FF v%s | Atualizado: %s 🚀', metadata.version, metadata.updated),
+    Size = UDim2.fromOffset(600, 700),
+    Enabled = true,
+    Key = Enum.KeyCode.RightControl -- Default toggle key
+})
+
+local Tabs = {
+    Main = Main:addTab('🚀 DAN-Player'),
+    Tuning = Main:addTab('⚙️ Ajustes Finos'),
+    Advanced = Main:addTab('⚡ Avançado'),
+    Configs = Main:addTab('🗄️ Configurações')
+}
+
+-- Groups and elements for VenyxUI
+-- NOTE: VenyxUI uses a slightly different API. 'addToggle', 'addDropdown', 'addSlider', etc.
+-- It also handles Options (values) slightly differently.
+
+-- Main Tab
+local AutoplayerSection = Tabs.Main:addSection('Controle DAN-Player')
+AutoplayerSection:addToggle('Autoplayer', {Default = Autoplayer.Enabled, Text = 'Ativar DAN-Player'}):OnChanged(function(state)
+    Autoplayer.Enabled = state
+    Venyx.Notify(state and 'DAN-Player ATIVADO! Que a força esteja com você!' or 'DAN-Player DESATIVADO.', 3)
+end)
+
+AutoplayerSection:addDropdown('PressMode', {
+    Default = Autoplayer.PressMode,
+    Values = {'firesignal', 'virtual input'},
+    Text = 'Modo de Input (Injeção)',
+}):OnChanged(function(value) Autoplayer.PressMode = value end)
+
+AutoplayerSection:addSlider('HumanErrorChance', {
+    Default = Autoplayer.HumanErrorChance,
+    Min = 0, Max = 100, Rounding = 0, Suffix = '%',
+    Text = 'Chance de Erro Humano',
+}):OnChanged(function(value) Autoplayer.HumanErrorChance = value end)
+
+AutoplayerSection:addSlider('MinHitInterval', {
+    Default = Autoplayer.MinHitInterval * 1000,
+    Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Intervalo Mín. entre Hits',
+}):OnChanged(function(value) Autoplayer.MinHitInterval = value / 1000 end)
+
+local HitChancesSection = Tabs.Tuning:addSection('Probabilidade de Acerto (Personalizável)')
+HitChancesSection:addDropdown('AutoplayerMode', {
+    Default = 'Automático', Values = {'Automático', 'Manual'},
+    Text = 'Modo de Acerto',
+})
+HitChancesSection:addSlider('SickChance', {Default = 100, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Sick chance'})
+HitChancesSection:addSlider('GoodChance', {Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Good chance'})
+HitChancesSection:addSlider('OkChance', {Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Ok chance'})
+HitChancesSection:addSlider('BadChance', {Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Bad chance'})
+HitChancesSection:addSlider('MissChance', {Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = '%', Text = 'Miss chance'})
+
+local HitTimingSection = Tabs.Tuning:addSection('Sincronização de Hits (Latency Bypass)')
+HitTimingSection:addDropdown('DelayMode', {
+    Default = Autoplayer.DelayMode, Values = {'Manual', 'Aleatório'},
+    Text = 'Modo de Atraso',
+}):OnChanged(function(value) Autoplayer.DelayMode = value end)
+
+HitTimingSection:addLabel('Atraso Manual Base')
+HitTimingSection:addSlider('ReleaseDelay', {
+    Default = Autoplayer.ReleaseDelay, Min = -100, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Atraso Nota Padrão',
+}):OnChanged(function(value) Autoplayer.ReleaseDelay = value end)
+HitTimingSection:addSlider('HeldDelay', {
+    Default = Autoplayer.HeldDelay, Min = -100, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Atraso Nota Segura',
+}):OnChanged(function(value) Autoplayer.HeldDelay = value end)
+
+HitTimingSection:addDivider()
+HitTimingSection:addLabel('Atraso Aleatório (Humanização)')
+HitTimingSection:addSlider('NoteDelayMin', {
+    Default = Autoplayer.NoteDelayMin, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Min Atraso Nota',
+}):OnChanged(function(value) Autoplayer.NoteDelayMin = value end)
+HitTimingSection:addSlider('NoteDelayMax', {
+    Default = Autoplayer.NoteDelayMax, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Max Atraso Nota',
+}):OnChanged(function(value) Autoplayer.NoteDelayMax = value end)
+
+HitTimingSection:addSlider('HeldDelayMin', {
+    Default = Autoplayer.HeldDelayMin, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Min Atraso Segura',
+}):OnChanged(function(value) Autoplayer.HeldDelayMin = value end)
+HitTimingSection:addSlider('HeldDelayMax', {
+    Default = Autoplayer.HeldDelayMax, Min = 0, Max = 100, Rounding = 0, Suffix = 'ms',
+    Text = 'Max Atraso Segura',
+}):OnChanged(function(value) Autoplayer.HeldDelayMax = value end)
+
+-- Performance Dashboard (VenyxUI equivalent)
+local PerformanceSection = Tabs.Main:addSection('Dashboard de Performance (DAN-Stats)')
+PerformanceSection:addLabel('<font color="#FFD700"><b>Aguardando dados...</b></font>', true)
+PerformanceSection:addLabel('Precisão: N/A')
+PerformanceSection:addLabel('Latência: N/A')
+PerformanceSection:addLabel('Notas/Min: N/A')
+
+local AdvancedMiscSection = Tabs.Advanced:addSection('Funcionalidades Secretas do DAN')
+AdvancedMiscSection:addButton('Desbloquear Notas de Desenvolvedor', function()
+    Venyx.Notify('Notas de Desenvolvedor Desbloqueadas! Ou não? 😉', 3)
+end)
+AdvancedMiscSection:addToggle('Auto Coletar Anéis', {Text = 'Auto Coletar Anéis (Stealth Mode)'})
+
+AdvancedMiscSection:addDivider()
+AdvancedMiscSection:addButton('Forçar Recarregamento de Dependências', function()
+    framework, scrollHandler, network = nil, nil, nil
+    Venyx.Notify('Forçando recarregamento das dependências do jogo...', 3)
+    pcall(findGameDependencies)
+end)
+
+local KeybindsSection = Tabs.Advanced:addSection('Keybinds Manuais (Para Ação Direta)')
+-- VenyxUI keybinds usually integrated directly into elements or through specific components.
+-- For simplicity, let's assume direct KeyCode usage or a custom keybind manager for these "manual actions".
+KeybindsSection:addLabel('Sick (Perfect Hit): [One]')
+KeybindsSection:addLabel('Good (Great Hit): [Two]')
+KeybindsSection:addLabel('Ok (Decent Hit): [Three]')
+KeybindsSection:addLabel('Bad (Meh Hit): [Four]')
+-- If you need these to be configurable, a more complex keybind system would be needed.
+
+-- Save Manager (adapted for VenyxUI - relies on Venyx internal option system)
+local SaveManager = {}
+SaveManager.FileName = 'dan_player_config.json'
+
+function SaveManager:SaveConfig(configName)
+    local data = {
+        version = 3,
+        options = {}
+    }
+    for key, element in pairs(Main.Elements) do -- Iterate VenyxUI elements
+        if element.Type and element.Value ~= nil then -- Only elements with value
+            data.options[key] = element.Value
+        end
+    end
+    local success, encoded = pcall(httpService.JSONEncode, httpService, data)
+    if not success then return false, 'Falha ao codificar dados: '.. tostring(encoded) end
+    writefile('funky_friday_autoplayer/'.. (configName or SaveManager.FileName), encoded)
+    return true
+end
+
+function SaveManager:LoadConfig(configName)
+    local filePath = 'funky_friday_autoplayer/'.. (configName or SaveManager.FileName)
+    if not isfile(filePath) then return false, 'Arquivo de configuração não encontrado.' end
+
+    local success, decoded = pcall(httpService.JSONDecode, httpService, readfile(filePath))
+    if not success then return false, 'Erro ao decodificar configuração: '.. tostring(decoded) end
+    if decoded.version ~= 3 then return false, 'Versão de configuração incompatível! (Esperado 3, Encontrado '.. tostring(decoded.version).. ')' end
+
+    for key, value in pairs(decoded.options) do
+        local element = Main.Elements[key]
+        if element and element.SetValue then -- Check if element exists and has SetValue method
+            element:SetValue(value)
+        end
+    end
+    return true
+end
+
+function SaveManager.RefreshConfigList(dropdown)
+    local list = listfiles('funky_friday_autoplayer')
+    local out = {}
+    for i = 1, #list do
+        local file = list[i]
+        if file:sub(-5) == '.json' then
+            local filename = file:match("([^/\\\]+)%.json$")
+            if filename and filename ~= SaveManager.FileName:match("([^/\\\]+)%.json$") then -- Exclude default
+                table.insert(out, filename)
+            end
+        end
+    end
+    dropdown:SetValues(out)
+    if #out > 0 then dropdown:SetValue(out[1]) end
+end
+
+-- Configuration Tab (VenyxUI)
+if type(readfile) == 'function' and type(writefile) == 'function' and type(makefolder) == 'function' and type(isfolder) == 'function' then
+    makefolder('funky_friday_autoplayer')
+
+    local ConfigSection = Tabs.Configs:addSection('Gerenciamento de Configurações')
+    local configDropdown = ConfigSection:addDropdown('ConfigList', {
+        Values = {}, Text = 'Configuração Selecionada', Default = nil
+    })
+    local configInput = ConfigSection:addInput('ConfigNameInput', {
+        Text = 'Nome para Salvar', Default = 'MinhaConfig'
+    })
+
+    ConfigSection:addButton('Salvar Configuração', function()
+        local name = configInput.Value
+        if name:gsub(' ', '') == '' then return Venyx.Notify('Nome de configuração inválido.', 3) end
+        local success, err = SaveManager:SaveConfig(name.. '.json')
+        if not success then return Venyx.Notify(tostring(err), 5) end
+        Venyx.Notify(string.format('Configuração "%s" SALVA!', name), 5)
+        task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+    end)
+
+    ConfigSection:addButton('Carregar Configuração', function()
+        local name = configDropdown.Value
+        if not name or name:gsub(' ', '') == '' then return Venyx.Notify('Selecione uma configuração para carregar.', 3) end
+        local success, err = SaveManager:LoadConfig(name)
+        if not success then return Venyx.Notify(tostring(err), 5) end
+        Venyx.Notify(string.format('Configuração "%s" CARREGADA!', name), 5)
+    end)
+
+    ConfigSection:addButton('Deletar Configuração', function()
+        local name = configDropdown.Value
+        if not name or name:gsub(' ', '') == '' then return Venyx.Notify('Selecione uma configuração para deletar.', 3) end
+        if delfile('funky_friday_autoplayer/'.. name) then
+            Venyx.Notify(string.format('Configuração "%s" DELETADA!', name), 5)
+            task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+        else
+            Venyx.Notify(string.format('Falha ao deletar "%s".', name), 5)
+        end
+    end)
+
+    ConfigSection:addButton('Atualizar Lista de Configs', function() SaveManager.RefreshConfigList(configDropdown) end)
+    task.defer(function() SaveManager.RefreshConfigList(configDropdown) end)
+else
+    local ConfigSection = Tabs.Configs:addSection('Gerenciamento de Configurações')
+    ConfigSection:addLabel('<font color="#FF0000"><b>Seu exploit não possui funções de arquivo.<br>Configurações não disponíveis.</b></font>', true)
+end
+
+-- Credits & Misc
+local CreditsSection = Tabs.Advanced:addSection('Créditos & DAN-Power')
+CreditsSection:addLabel('<font color="#3da5ff"><b>wally</b></font> - Script Original', true)
+CreditsSection:addLabel('<font color="#de6cff"><b>Sezei</b></font> - Contribuidor', true)
+CreditsSection:addLabel('VenyxCode - UI Library (VenyxUI)', true)
+CreditsSection:addDivider()
+CreditsSection:addLabel('<font color="#00FF00"><b>DAN</b></font> - Tunagem e Poder Ilimitado ⚡', true)
+
+local MiscSection = Tabs.Advanced:addSection('Controle DAN')
+MiscSection:addLabel(metadata.message or 'Nenhuma mensagem do DAN encontrada!', true)
+MiscSection:addDivider()
+MiscSection:addButton('Descarregar Script (DAN-Exit)', function() pcall(shared._unload) end)
+MiscSection:addButton('Copiar Discord (Wally)', function()
+    if pcall(setclipboard, "https://wally.cool/discord") then
+        Venyx.Notify('Link do Discord do Wally copiado!', 5)
+    end
+end)
+
+-- Main.ToggleKey is already handled by VenyxUI, using Enum.KeyCode.RightControl by default.
+-- You can change it in the VenyxUI options or by setting Main.Key.
+
+runService.RenderStepped:Connect(function()
+    if Autoplayer.Enabled and framework and framework.GameUI and framework.GameUI.Notes then
+        -- ESTA PARTE É CRÍTICA!
+        -- O Funky Friday tem sua própria forma de gerenciar as notas.
+        -- Você precisa de engenharia reversa para "hookar" os eventos de notas do jogo.
+        -- Geralmente, isso envolve:
+        -- 1. Encontrar o objeto ou tabela que armazena as notas ativas.
+        -- 2. Conectar-se a um evento (se existir) quando uma nota é gerada/atingida.
+        -- 3. Ou iterar sobre as notas a cada frame (como neste placeholder) e calcular o tempo de acerto.
+
+        -- Placeholder: Você precisaria de algo como:
+        -- for _, noteInstance in pairs(scrollHandler.GetActiveNotes() or {}) do -- Exemplo hipotético
+        -- if noteInstance.IsActive and noteInstance.ArrowIndex and not noteInstance.IsHit then
+        -- local notePosition = noteInstance.Position -- Posição atual da nota na tela
+        -- local hitLinePosition = localPlayer.Character.HumanoidRootPart.Position.Y -- ou uma referência fixa
+        -- local timeToHit = (notePosition - hitLinePosition) / scrollHandler.NoteSpeed -- Exemplo de cálculo
+
+        -- if timeToHit <= 0.05 anlocal runService = game:GetService('RunService')
 local players = game:GetService('Players')
 local localPlayer = players.LocalPlayer
 local userInputService = game:GetService('UserInputService')

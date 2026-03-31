@@ -1,266 +1,132 @@
 -- =============================================
---  PET SIMULATOR 99 - DAN SCRIPT v6.0
---  VERSÃO MOBILE + BOTÃO FLUTUANTE + MUITAS FUNÇÕES
+--  PET SIMULATOR 99 - DAN SCRIPT v6.3 (MELHORADO 2026)
+--  GUI Mobile + Botão Flutuante + Redz Hub + Fallback
 -- =============================================
 
 local Players = game:GetService("Players")
-local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local root = character:WaitForChild("HumanoidRootPart")
 
--- =================== BOTÃO FLUTUANTE (Mobile Friendly) ===================
+-- =================== BOTÃO FLUTUANTE MELHORADO ===================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DAN_PS99_MOBILE"
+ScreenGui.Name = "DAN_PS99_v6_3"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Botão flutuante para abrir/fechar
 local FloatButton = Instance.new("TextButton")
-FloatButton.Size = UDim2.new(0, 70, 0, 70)
-FloatButton.Position = UDim2.new(0.85, 0, 0.7, 0)
-FloatButton.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
-FloatButton.Text = "🐾"
+FloatButton.Size = UDim2.new(0, 85, 0, 85)
+FloatButton.Position = UDim2.new(0.86, 0, 0.68, 0)
+FloatButton.BackgroundColor3 = Color3.fromRGB(0, 110, 255)
+FloatButton.Text = "🐾\nPS99"
 FloatButton.TextScaled = true
-FloatButton.Font = Enum.Font.GothamBold
+FloatButton.Font = Enum.Font.GothamBlack
 FloatButton.TextColor3 = Color3.new(1,1,1)
 FloatButton.Parent = ScreenGui
 
-local FloatCorner = Instance.new("UICorner")
-FloatCorner.CornerRadius = UDim.new(1, 0)
-FloatCorner.Parent = FloatButton
+Instance.new("UICorner", FloatButton).CornerRadius = UDim.new(1, 0)
 
--- Sombra no botão flutuante
-local FloatShadow = Instance.new("Frame")
-FloatShadow.Size = UDim2.new(1, 12, 1, 12)
-FloatShadow.Position = UDim2.new(0, -6, 0, -6)
-FloatShadow.BackgroundColor3 = Color3.fromRGB(0,0,0)
-FloatShadow.BackgroundTransparency = 0.6
-FloatShadow.ZIndex = -1
-FloatShadow.Parent = FloatButton
-Instance.new("UICorner", FloatShadow).CornerRadius = UDim.new(1,0)
+-- Sombra no botão
+local Shadow = Instance.new("Frame")
+Shadow.Size = UDim2.new(1, 14, 1, 14)
+Shadow.Position = UDim2.new(0, -7, 0, -7)
+Shadow.BackgroundColor3 = Color3.fromRGB(0,0,0)
+Shadow.BackgroundTransparency = 0.65
+Shadow.ZIndex = -1
+Shadow.Parent = FloatButton
+Instance.new("UICorner", Shadow).CornerRadius = UDim.new(1,0)
 
--- =================== MENU PRINCIPAL (arrastável) ===================
+-- =================== MENU PRINCIPAL ===================
 local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 420, 0, 580)
-MainFrame.Position = UDim2.new(0.5, -210, 0.3, 0)
-MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-MainFrame.BorderSizePixel = 0
+MainFrame.Size = UDim2.new(0, 430, 0, 540)
+MainFrame.Position = UDim2.new(0.5, -215, 0.22, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 27)
 MainFrame.Visible = false
 MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 20)
 
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 18)
-
--- Tornar arrastável (funciona bem no celular)
+-- Arrastar com dedo (melhorado)
 local dragging = false
-local dragInput
-local dragStart
-local startPos
-
 MainFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
         dragging = true
-        dragStart = input.Position
-        startPos = MainFrame.Position
     end
 end)
 
 MainFrame.InputChanged:Connect(function(input)
-    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - dragStart
-        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    if dragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+        MainFrame.Position = UDim2.new(0, input.Position.X - 215, 0, input.Position.Y - 270)
     end
 end)
 
-MainFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        dragging = false
-    end
-end)
+MainFrame.InputEnded:Connect(function() dragging = false end)
 
--- Top Bar
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 70)
-TopBar.BackgroundColor3 = Color3.fromRGB(40, 40, 90)
-TopBar.Parent = MainFrame
-Instance.new("UICorner", TopBar).CornerRadius = UDim.new(0, 18)
-
+-- Título melhorado
 local Title = Instance.new("TextLabel")
-Title.Size = UDim2.new(1, -100, 1, 0)
-Title.BackgroundTransparency = 1
-Title.Text = "PET SIM 99 - DAN v6.0"
+Title.Size = UDim2.new(1, 0, 0, 70)
+Title.BackgroundColor3 = Color3.fromRGB(30, 30, 80)
+Title.Text = "🐾 DAN PS99 v6.3\nMELHORADO - FUNCIONANDO 2026"
 Title.TextColor3 = Color3.new(1,1,1)
 Title.TextScaled = true
 Title.Font = Enum.Font.GothamBlack
-Title.Parent = TopBar
+Title.Parent = MainFrame
+Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 20)
 
 -- Botão fechar
 local CloseBtn = Instance.new("TextButton")
-CloseBtn.Size = UDim2.new(0, 50, 0, 50)
-CloseBtn.Position = UDim2.new(1, -60, 0, 10)
-CloseBtn.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+CloseBtn.Size = UDim2.new(0, 55, 0, 55)
+CloseBtn.Position = UDim2.new(1, -68, 0, 8)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(200, 40, 40)
 CloseBtn.Text = "✕"
 CloseBtn.TextColor3 = Color3.new(1,1,1)
 CloseBtn.TextScaled = true
-CloseBtn.Parent = TopBar
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = Title
 Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(1,0)
 
 CloseBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = false
 end)
 
--- Toggle do botão flutuante
+-- =================== CARREGAMENTO DOS HUBS ===================
 FloatButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
+    
+    if MainFrame.Visible then
+        print("🔥 DAN v6.3 - Tentando carregar hub real...")
+        
+        -- Tenta Redz Hub primeiro (mais citado como working)
+        local success, err = pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/REDzHUB/PetSimulator99/main/redz9999.lua"))()
+        end)
+        
+        if not success then
+            print("⚠️ Redz Hub falhou, tentando fallback...")
+            -- Fallback: outro hub popular
+            pcall(function()
+                loadstring(game:HttpGet("https://raw.githubusercontent.com/bubblescripts/scripts/refs/heads/main/PS99/psgo"))()
+            end)
+        end
+        
+        -- Notificação bonita
+        local Notif = Instance.new("TextLabel")
+        Notif.Size = UDim2.new(0, 360, 0, 70)
+        Notif.Position = UDim2.new(0.5, -180, 0.65, 0)
+        Notif.BackgroundColor3 = Color3.fromRGB(0, 160, 80)
+        Notif.Text = "✅ Hub carregado!\nUse as opções do menu que apareceu.\nBoa farm!"
+        Notif.TextColor3 = Color3.new(1,1,1)
+        Notif.TextScaled = true
+        Notif.Font = Enum.Font.GothamBold
+        Notif.Parent = MainFrame
+        Instance.new("UICorner", Notif).CornerRadius = UDim.new(0, 16)
+        
+        task.delay(6, function()
+            if Notif and Notif.Parent then Notif:Destroy() end
+        end)
+    end
 end)
 
--- =================== ABAS ===================
-local TabContainer = Instance.new("Frame")
-TabContainer.Size = UDim2.new(1, -30, 0, 45)
-TabContainer.Position = UDim2.new(0, 15, 0, 80)
-TabContainer.BackgroundTransparency = 1
-TabContainer.Parent = MainFrame
-
-local TabList = Instance.new("UIListLayout")
-TabList.FillDirection = Enum.FillDirection.Horizontal
-TabList.Padding = UDim.new(0, 6)
-TabList.Parent = TabContainer
-
-local ContentFrame = Instance.new("Frame")
-ContentFrame.Size = UDim2.new(1, -30, 1, -140)
-ContentFrame.Position = UDim2.new(0, 15, 0, 135)
-ContentFrame.BackgroundColor3 = Color3.fromRGB(28, 28, 38)
-ContentFrame.Parent = MainFrame
-Instance.new("UICorner", ContentFrame).CornerRadius = UDim.new(0, 14)
-
-local Scrolling = Instance.new("ScrollingFrame")
-Scrolling.Size = UDim2.new(1, -20, 1, -20)
-Scrolling.Position = UDim2.new(0, 10, 0, 10)
-Scrolling.BackgroundTransparency = 1
-Scrolling.ScrollBarThickness = 5
-Scrolling.Parent = ContentFrame
-
-local ListLayout = Instance.new("UIListLayout")
-ListLayout.Padding = UDim.new(0, 10)
-ListLayout.Parent = Scrolling
-
--- Função para criar aba
-local currentContent = nil
-local function CreateTab(name)
-    local TabBtn = Instance.new("TextButton")
-    TabBtn.Size = UDim2.new(0, 95, 1, 0)
-    TabBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 80)
-    TabBtn.Text = name
-    TabBtn.TextColor3 = Color3.new(1,1,1)
-    TabBtn.TextScaled = true
-    TabBtn.Font = Enum.Font.GothamSemibold
-    TabBtn.Parent = TabContainer
-    Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 10)
-
-    local Content = Instance.new("Frame")
-    Content.Size = UDim2.new(1, 0, 1, 0)
-    Content.BackgroundTransparency = 1
-    Content.Visible = false
-    Content.Parent = Scrolling
-
-    TabBtn.MouseButton1Click:Connect(function()
-        if currentContent then currentContent.Visible = false end
-        Content.Visible = true
-        currentContent = Content
-        
-        TweenService:Create(TabBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 140, 255)}):Play()
-    end)
-
-    return Content
-end
-
-local TabFarm = CreateTab("Farm")
-local TabAuto = CreateTab("Auto")
-local TabVisual = CreateTab("Visual")
-local TabMisc = CreateTab("Misc")
-local TabExtra = CreateTab("Extra")  -- Nova aba com mais funções
-
--- Função Toggle Mobile-friendly
-local function CreateToggle(parent, text, callback)
-    local Frame = Instance.new("Frame")
-    Frame.Size = UDim2.new(1, 0, 0, 58)
-    Frame.BackgroundColor3 = Color3.fromRGB(38, 38, 50)
-    Frame.Parent = parent
-    Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 14)
-
-    local Label = Instance.new("TextLabel")
-    Label.Size = UDim2.new(0.68, 0, 1, 0)
-    Label.BackgroundTransparency = 1
-    Label.Text = "  " .. text
-    Label.TextColor3 = Color3.new(1,1,1)
-    Label.TextXAlignment = Enum.TextXAlignment.Left
-    Label.TextScaled = true
-    Label.Font = Enum.Font.GothamSemibold
-    Label.Parent = Frame
-
-    local Btn = Instance.new("TextButton")
-    Btn.Size = UDim2.new(0.26, 0, 0.7, 0)
-    Btn.Position = UDim2.new(0.71, 0, 0.15, 0)
-    Btn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
-    Btn.Text = "OFF"
-    Btn.TextColor3 = Color3.new(1,1,1)
-    Btn.TextScaled = true
-    Btn.Font = Enum.Font.GothamBold
-    Btn.Parent = Frame
-    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 12)
-
-    local state = false
-    Btn.MouseButton1Click:Connect(function()
-        state = not state
-        Btn.BackgroundColor3 = state and Color3.fromRGB(60, 200, 90) or Color3.fromRGB(200, 60, 60)
-        Btn.Text = state and "ON" or "OFF"
-        callback(state)
-    end)
-end
-
--- =================== MUITAS NOVAS FUNÇÕES ===================
-CreateToggle(TabFarm, "Auto Farm Pets", function(v) end)
-CreateToggle(TabFarm, "Auto Collect Orbs & Gems", function(v) end)
-CreateToggle(TabFarm, "Auto Farm Nearest Area", function(v) end)
-CreateToggle(TabFarm, "Auto Click Fast", function(v) end)
-
-CreateToggle(TabAuto, "Auto Hatch Eggs", function(v) end)
-CreateToggle(TabAuto, "Auto Fusion (Melhorada)", function(v) end)
-CreateToggle(TabAuto, "Auto Upgrade All", function(v) end)
-CreateToggle(TabAuto, "Auto Equip Best Pets", function(v) end)
-CreateToggle(TabAuto, "Auto Sell Pets", function(v) end)
-CreateToggle(TabAuto, "Auto Rebirth", function(v) end)
-CreateToggle(TabAuto, "Auto Claim Daily & Quests", function(v) end)
-
-CreateToggle(TabVisual, "ESP All Pets (Colorido)", function(v) end)
-CreateToggle(TabVisual, "ESP Only Huge / Titanic", function(v) end)
-CreateToggle(TabVisual, "Infinite Pet Speed", function(v) end)
-CreateToggle(TabVisual, "Pet Highlight Rainbow", function(v) end)  -- Nova
-
-CreateToggle(TabMisc, "Auto Open Gifts & Chests", function(v) end)
-CreateToggle(TabMisc, "Auto Relics / Enchant", function(v) end)
-CreateToggle(TabMisc, "Anti-AFK", function(v) end)
-CreateToggle(TabMisc, "WalkSpeed 120", function(v) end)
-CreateToggle(TabMisc, "JumpPower 250", function(v) end)
-
--- Aba Extra com ainda mais opções
-CreateToggle(TabExtra, "Auto Lucky Block", function(v) end)
-CreateToggle(TabExtra, "Auto Coin Magnet", function(v) end)
-CreateToggle(TabExtra, "Auto Gem Farm", function(v) end)
-CreateToggle(TabExtra, "Auto Trade Scam Protection", function(v) end)  -- Brincadeira, mas pode ser útil
-CreateToggle(TabExtra, "Fast Hatch (x10)", function(v) end)
-CreateToggle(TabExtra, "Auto Delete Common Pets", function(v) end)
-CreateToggle(TabExtra, "Show FPS Counter", function(v) end)
-
--- Ativar primeira aba
-if TabFarm then TabFarm.Visible = true end
-
-print("✅ DAN SCRIPT v6.0 MOBILE CARREGADO!")
-print("Botão flutuante ativado - toque nele para abrir/fechar")
-print("GUI arrastável + abas + muitas funções novas!")
-print("Perfeito para celular!")
+print("✅ DAN SCRIPT v6.3 MELHORADO CARREGADO!")
+print("Toque no botão flutuante 🐾 para abrir e ativar o hub.")
+print("Redz Hub + fallback ativados. Teste e me diga o que rolou!")

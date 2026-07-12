@@ -1079,10 +1079,17 @@ function CheckBox(name, xx, yy, _, bool)
     local yy2 = yy+0.0020
     TxtCheckBox(name, xx2 + 0.003, yy2 - 0.0040, 0.30, 0, false, 255, 255, 255)
 
+    -- Quadrado amarelo
+    local cbX = xx2-0.010
+    local cbY = yy2
+    local cbW = 0.018
+    local cbH = 0.018
     if bool then
-        DrawSprite(menu.txtnames.toggleon, menu.txtnames.toggleon, xx2-0.010, yy2, 0.020, 0.020, 0.0, 255, 255, 255, 255)
+        DrawRectangle(cbX, cbY, cbW, cbH, 255, 255, 0, 255)
+        DrawRectangle(cbX, cbY, cbW-0.006, cbH-0.006, 255, 255, 255, 255)
     else
-        DrawSprite(menu.txtnames.toggleoff, menu.txtnames.toggleoff, xx2-0.010, yy2, 0.020, 0.020, 0.0, 255, 255, 255, 255)
+        DrawRectangle(cbX, cbY, cbW, cbH, 50, 50, 50, 255)
+        DrawRectangle(cbX, cbY, cbW-0.004, cbH-0.004, 0, 0, 0, 200)
     end
 
     if( (x / x_res) + 0.035 >= xx and (x / x_res) - 0.035 <= xx and (y / y_res) + 0.012 >= yy and (y / y_res) - 0.012 <= yy) and IsDisabledControlJustReleased(0, 92) then 

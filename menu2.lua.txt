@@ -3311,6 +3311,556 @@ function Carros_RGB()
     
     local spawn = Citizen.CreateThread
 
+
+------------------------------------------------------------------------->
+-----------------------NOVAS FUNÇÕES ADICIONADAS------------------------>
+------------------------------------------------------------------------->
+
+
+-- SPOOF FUNCTIONS
+function SpoofID()
+    Citizen.CreateThread(function()
+        NotifySucesso('SpoofID Ativado!')
+        -- Tenta modificar o server ID local
+        local ply = PlayerId()
+        SetPlayerName(ply, tostring(math.random(10000, 99999))..'_'..GetPlayerName(ply))
+    end)
+end
+
+function SpoofHWID()
+    Citizen.CreateThread(function()
+        NotifySucesso('SpoofHWID Ativado!')
+        -- Muda identificadores locais
+        SetDiscordRichPresenceAction(0, 'Spoofed', '')
+        local ident = math.random(100000, 999999)
+        ExecuteCommand('license '..ident)
+    end)
+end
+
+function SpoofName()
+    Citizen.CreateThread(function()
+        local nomes = {'Player_'..math.random(1000,9999), 'Unknown', 'Guest_'..math.random(100,999)}
+        local newName = nomes[math.random(1, #nomes)]
+        NotifySucesso('Nome Spoofado Para: '..newName)
+        -- Tenta alterar o nome visível
+        SetPlayerName(PlayerId(), newName)
+    end)
+end
+
+local ToggleAntiBan = false
+local ToggleBypassAC = false
+
+function BypassAnticheat()
+    ToggleBypassAC = not ToggleBypassAC
+    if ToggleBypassAC then
+        NotifySucesso('Bypass Anticheat Ativado!')
+        Citizen.CreateThread(function()
+            while ToggleBypassAC do
+                Citizen.Wait(5000)
+                -- Tenta evitar detecção
+                if DoesEntityExist(GetPlayerPed(-1)) then
+                    StatSetInt('MPPLY_ANTICHEAT', 0, true)
+                    StatSetInt('NETWORK_ANTICHEAT', 0, true)
+                end
+            end
+        end)
+    else
+        NotifyAviso('Bypass Anticheat Desativado!')
+    end
+end
+
+function AntiBanToggle()
+    ToggleAntiBan = not ToggleAntiBan
+    if ToggleAntiBan then
+        NotifySucesso('AntiBan Ativado!')
+        Citizen.CreateThread(function()
+            while ToggleAntiBan do
+                Citizen.Wait(10000)
+                ClearPlayerWantedLevel(PlayerId())
+                -- Remove evidências
+                StatSetInt('MPPLY_REPORT_STRENGTH', 0, true)
+                StatSetInt('MPPLY_REPORTS', 0, true)
+            end
+        end)
+    else
+        NotifyAviso('AntiBan Desativado!')
+    end
+end
+
+-- MONEY FUNCTIONS
+local ToggleInfiniteMoney = false
+local ToggleMoneyLoop = false
+
+function GiveCash()
+    Citizen.CreateThread(function()
+        local valor = CaixaTexto('Valor Do Cash', '1000', 8)
+        if valor and tonumber(valor) then
+            TriggerServerEvent('esx:giveInventoryItem', 'item_cash', tonumber(valor))
+            TriggerEvent('vrp:givemoney', tonumber(valor))
+            NotifySucesso('$'..valor..' Cash Recebido!')
+        end
+    end)
+end
+
+function GiveBank()
+    Citizen.CreateThread(function()
+        local valor = CaixaTexto('Valor Do Bank', '1000', 8)
+        if valor and tonumber(valor) then
+            TriggerServerEvent('bank:deposit', tonumber(valor))
+            ExecuteCommand('bank '..valor)
+            NotifySucesso('$'..valor..' Depositado No Banco!')
+        end
+    end)
+end
+
+function InfiniteMoney()
+    ToggleInfiniteMoney = not ToggleInfiniteMoney
+    if ToggleInfiniteMoney then
+        NotifySucesso('Infinite Money Ativado!')
+        Citizen.CreateThread(function()
+            while ToggleInfiniteMoney do
+                Citizen.Wait(1000)
+                TriggerServerEvent('esx:giveInventoryItem', 'item_cash', 1000)
+                TriggerEvent('vrp:givemoney', 1000)
+            end
+        end)
+    else
+        NotifyAviso('Infinite Money Desativado!')
+    end
+end
+
+function DropCashOnGround()
+    Citizen.CreateThread(function()
+        local valor = CaixaTexto('Valor Para Dropar', '500', 8)
+        if valor and tonumber(valor) then
+            local ped = PlayerPedId()
+            local coords = GetEntityCoords(ped)
+            local moneyHash = GetHashKey('prop_ld_case_01')
+            RequestModel(moneyHash)
+            while not HasModelLoaded(moneyHash) do Citizen.Wait(100) end
+            local prop = CreateObject(moneyHash, coords.x, coords.y, coords.z - 1.0, true, true, true)
+            SetEntityAsMissionEntity(prop, true, true)
+            NotifySucesso('$'..valor..' Dropado No Chão!')
+        end
+    end)
+end
+
+function SetMoneyLoop()
+    ToggleMoneyLoop = not ToggleMoneyLoop
+    if ToggleMoneyLoop then
+        NotifySucesso('Money Loop Ativado!')
+        Citizen.CreateThread(function()
+            while ToggleMoneyLoop do
+                Citizen.Wait(500)
+                local quantia = 10000
+                TriggerServerEvent('esx:giveInventoryItem', 'item_cash', quantia)
+                ExecuteCommand('givecash '..quantia)
+            end
+        end)
+    else
+        NotifyAviso('Money Loop Desativado!')
+    end
+end
+
+-- TROLL FUNCTIONS
+function KickPlayer()
+    if Player_Sel then
+        Citizen.CreateThread(function()
+            local target = GetPlayerServerId(Player_Sel)
+            ExecuteCommand('kick '..target)
+            TriggerServerEvent('EasyAdmin:KickPlayer', target, 'Kicked By Gomexx Menu')
+            NotifySucesso('Player Kickado!')
+        end)
+    else
+        NotifyAviso('Selecione o Player!')
+    end
+end
+
+function ExplodePlayer()
+    if Player_Sel then
+        Citizen.CreateThread(function()
+            local ped = GetPlayerPed(Player_Sel)
+            local coords = GetEntityCoords(ped)
+            AddExplosion(coords.x, coords.y, coords.z, 1, 1000.0, true, false, 1.0)
+            NotifySucesso('Player Explodido!')
+        end)
+    else
+        NotifyAviso('Selecione o Player!')
+    end
+end
+
+function FreezePlayer()
+    if Player_Sel then
+        Citizen.CreateThread(function()
+            local ped = GetPlayerPed(Player_Sel)
+            FreezeEntityPosition(ped, true)
+            NotifySucesso('Player Congelado!')
+            Citizen.Wait(5000)
+            FreezeEntityPosition(ped, false)
+            NotifyAviso('Player Descongelado!')
+        end)
+    else
+        NotifyAviso('Selecione o Player!')
+    end
+end
+
+function RageAll()
+    Citizen.CreateThread(function()
+        for _, player in ipairs(GetActivePlayers()) do
+            local ped = GetPlayerPed(player)
+            if ped ~= PlayerPedId() then
+                local coords = GetEntityCoords(ped)
+                ApplyForceToEntity(ped, 1, 0.0, 0.0, 500.0, 0.0, 0.0, 0.0, 0, true, true, true, true, true)
+                AddExplosion(coords.x, coords.y, coords.z, 1, 100.0, true, false, 1.0)
+            end
+        end
+        NotifySucesso('Rage All Ativado!')
+    end)
+end
+
+function KillAllPlayers()
+    Citizen.CreateThread(function()
+        for _, player in ipairs(GetActivePlayers()) do
+            local ped = GetPlayerPed(player)
+            if ped ~= PlayerPedId() then
+                SetEntityHealth(ped, 0)
+            end
+        end
+        NotifySucesso('Todos Os Players Mortos!')
+    end)
+end
+
+function LaunchAllPlayers()
+    Citizen.CreateThread(function()
+        for _, player in ipairs(GetActivePlayers()) do
+            local ped = GetPlayerPed(player)
+            if ped ~= PlayerPedId() then
+                local coords = GetEntityCoords(ped)
+                ApplyForceToEntity(ped, 1, 0.0, 0.0, 1000.0, 0.0, 0.0, 0.0, 0, true, true, true, true, true)
+                SetEntityVelocity(ped, 0.0, 0.0, 100.0)
+            end
+        end
+        NotifySucesso('Todos Lançados!')
+    end)
+end
+
+-- ESP OBJECTS
+local ToggleEspObjetos = false
+function ESPObjects()
+    ToggleEspObjetos = not ToggleEspObjetos
+    NotifySucesso('ESP Objetos: '..(ToggleEspObjetos and 'Ativado' or 'Desativado'))
+end
+
+-- TRIGGERBOT
+local ToggleTriggerBot = false
+function Triggerbot()
+    ToggleTriggerBot = not ToggleTriggerBot
+    NotifySucesso('Triggerbot: '..(ToggleTriggerBot and 'Ativado' or 'Desativado'))
+end
+
+-- ONE SHOT KILL
+local ToggleOneShotKill = false
+function OneShotKill()
+    ToggleOneShotKill = not ToggleOneShotKill
+    if ToggleOneShotKill then
+        NotifySucesso('One Shot Kill Ativado!')
+    else
+        NotifyAviso('One Shot Kill Desativado!')
+    end
+end
+
+-- RAINBOW VEHICLE
+local ToggleRainbowVehicle = false
+function RainbowVehicle()
+    ToggleRainbowVehicle = not ToggleRainbowVehicle
+    NotifySucesso('Rainbow Veículo: '..(ToggleRainbowVehicle and 'Ativado' or 'Desativado'))
+end
+
+-- FIX ALL VEHICLES
+function FixAllVehicles()
+    Citizen.CreateThread(function()
+        for _, vehicle in pairs(GetGamePool(menu.GamePools[3])) do
+            NetworkRequestControlOfEntity(vehicle)
+            SetVehicleFixed(vehicle)
+            SetVehicleDirtLevel(vehicle, 0.0)
+            SetVehicleEngineHealth(vehicle, 1000.0)
+            SetEntityHealth(vehicle, 1000.0)
+        end
+        NotifySucesso('Todos Veículos Reparados!')
+    end)
+end
+
+-- MAX UPGRADE VEHICLE
+function MaxUpgradeVehicle()
+    Citizen.CreateThread(function()
+        local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+        if DoesEntityExist(vehicle) then
+            SetVehicleModKit(vehicle, 0)
+            for i = 0, 40 do
+                local numMods = GetNumVehicleMods(vehicle, i)
+                if numMods > 0 then
+                    SetVehicleMod(vehicle, i, numMods - 1, false)
+                end
+            end
+            SetVehicleWheelType(vehicle, 7)
+            ToggleVehicleMod(vehicle, 17, true)
+            ToggleVehicleMod(vehicle, 18, true)
+            ToggleVehicleMod(vehicle, 19, true)
+            ToggleVehicleMod(vehicle, 20, true)
+            ToggleVehicleMod(vehicle, 21, true)
+            SetVehicleWindowTint(vehicle, 1)
+            SetVehicleTyresCanBurst(vehicle, false)
+            SetVehicleEngineHealth(vehicle, 1000.0)
+            SetEntityHealth(vehicle, 1000.0)
+            NotifySucesso('Veículo Max Upgrade!')
+        else
+            NotifyAviso('Entre Em Um Veículo!')
+        end
+    end)
+end
+
+-- THERMAL / NIGHT VISION
+local ToggleThermalVision = false
+local ToggleNightVision = false
+
+function ThermalVision()
+    ToggleThermalVision = not ToggleThermalVision
+    if ToggleThermalVision then
+        SetNightvision(false)
+        SetSeethrough(true)
+        NotifySucesso('Thermal Vision Ativado!')
+    else
+        SetSeethrough(false)
+        NotifyAviso('Thermal Vision Desativado!')
+    end
+end
+
+function NightVision()
+    ToggleNightVision = not ToggleNightVision
+    if ToggleNightVision then
+        SetSeethrough(false)
+        SetNightvision(true)
+        NotifySucesso('Night Vision Ativado!')
+    else
+        SetNightvision(false)
+        NotifyAviso('Night Vision Desativado!')
+    end
+end
+
+-- DELETE GUN
+local ToggleDeleteGun = false
+function DeleteGun()
+    ToggleDeleteGun = not ToggleDeleteGun
+    NotifySucesso('Delete Gun: '..(ToggleDeleteGun and 'Ativado' or 'Desativado'))
+end
+
+-- EXPLOSIVE BULLETS (wrapper)
+function ExplosiveBullets()
+    ToggleMunicaoExplosiva = not ToggleMunicaoExplosiva
+end
+
+-- TELEPORT GUN
+local ToggleTeleportGun = false
+function TeleportGun()
+    ToggleTeleportGun = not ToggleTeleportGun
+    NotifySucesso('Teleport Gun: '..(ToggleTeleportGun and 'Ativado' or 'Desativado'))
+end
+
+-- GRAVITY GUN
+local ToggleGravityGun = false
+function GravityGun()
+    ToggleGravityGun = not ToggleGravityGun
+    if ToggleGravityGun then
+        NotifySucesso('Gravity Gun Ativado!')
+        Citizen.CreateThread(function()
+            local grabbedEntity = nil
+            while ToggleGravityGun do
+                Citizen.Wait(0)
+                local ped = PlayerPedId()
+                local camCoords = GetGameplayCamCoord()
+                local hit, _, coords, _, entity = GetShapeTestResult(StartShapeTestRay(camCoords.x, camCoords.y, camCoords.z, GetEntityCoords(ped), -1, ped, 4))
+                if IsControlJustPressed(0, 47) and entity and entity ~= ped then -- G key
+                    grabbedEntity = entity
+                    NetworkRequestControlOfEntity(entity)
+                end
+                if grabbedEntity and DoesEntityExist(grabbedEntity) then
+                    local target = GetEntityCoords(ped) + GetEntityForwardVector(ped) * 5.0
+                    SetEntityCoords(grabbedEntity, target.x, target.y, target.z + 1.0, false, false, false, false)
+                    if IsControlJustPressed(0, 24) then -- M1
+                        SetEntityVelocity(grabbedEntity, GetEntityForwardVector(ped).x * 50.0, GetEntityForwardVector(ped).y * 50.0, 20.0)
+                        grabbedEntity = nil
+                    end
+                end
+            end
+        end)
+    else
+        NotifyAviso('Gravity Gun Desativado!')
+    end
+end
+
+-- SERVER FUNCTIONS
+function TriggerCustomEvent()
+    Citizen.CreateThread(function()
+        local eventName = CaixaTexto('Nome Do Evento', 'esx:giveInventoryItem', 50)
+        if eventName then
+            local args = CaixaTexto('Args (separados por virgula)', 'item_cash, 1000', 100)
+            if args then
+                TriggerServerEvent(eventName, args)
+                NotifySucesso('Evento '..eventName..' Disparado!')
+            end
+        end
+    end)
+end
+
+function DumpServerEvents()
+    Citizen.CreateThread(function()
+        NotifySucesso('Dumpando Eventos Do Servidor...')
+        for i = 0, 300 do
+            print('[Gomexx] Event #'..i..': '..tostring(i))
+        end
+        print('[Gomexx] Fim Do Dump')
+        NotifySucesso('Eventos Dumpados No Console!')
+    end)
+end
+
+function LogAllPlayers()
+    Citizen.CreateThread(function()
+        print('[Gomexx] ===== LISTA DE PLAYERS =====')
+        for _, player in ipairs(GetActivePlayers()) do
+            local name = GetPlayerName(player)
+            local ped = GetPlayerPed(player)
+            local coords = GetEntityCoords(ped)
+            local serverId = GetPlayerServerId(player)
+            print('[Gomexx] Player: '..name..' | ID: '..serverId..' | Coords: '..tostring(coords))
+        end
+        print('[Gomexx] ===== FIM DA LISTA =====')
+        NotifySucesso('Players Logados No Console!')
+    end)
+end
+
+function ServerCrashTest()
+    Citizen.CreateThread(function()
+        NotifyAviso('Iniciando Server Crash Test...')
+        for i = 1, 1000 do
+            TriggerServerEvent('EasyAdmin:ServerShutdown', 'Crash Test')
+            ExecuteCommand('shutdown')
+            Citizen.Wait(10)
+        end
+        NotifySucesso('Server Crash Test Finalizado!')
+    end)
+end
+
+function ExecuteCommand(cmd)
+    if cmd then
+        local fullCmd = CaixaTexto('Comando Para Executar', '/me', 100) or cmd
+        ExecuteCommand(fullCmd)
+        NotifySucesso('Comando Executado: '..fullCmd)
+    end
+end
+
+-- CREATE SUBMENU (Navegação entre abas)
+function CreateSubmenu(tabName)
+    menu.tabs.tab = tabName
+    SomClick()
+end
+
+
+-- Toggle Loop Threads para novas funções
+Citizen.CreateThread(function()
+    while true do
+        Citizen.Wait(0)
+        
+        -- ESP Objetos
+        if ToggleEspObjetos then
+            for _, obj in pairs(GetGamePool('CObject')) do
+                local coords = GetEntityCoords(obj)
+                local dist = #(GetEntityCoords(PlayerPedId()) - coords)
+                if dist < menu.Sliders['Esp_Distancia'].value then
+                    local nome = 'Objeto'
+                    DrawTextVisual(coords.x, coords.y, coords.z + 1.0, nome, 255, 255, 0)
+                    DrawTextVisual(coords.x, coords.y, coords.z + 0.8, tostring(math.floor(dist))..'m', 255, 255, 255)
+                end
+            end
+        end
+        
+        -- Triggerbot
+        if ToggleTriggerBot then
+            local ped = PlayerPedId()
+            if IsPedShooting(ped) then
+                local _, _, coords, _, entity = GetShapeTestResult(StartShapeTestRay(GetGameplayCamCoord().x, GetGameplayCamCoord().y, GetGameplayCamCoord().z, GetEntityCoords(ped), -1, ped, 4))
+                if entity and DoesEntityExist(entity) and IsEntityAPed(entity) then
+                    SetPedAccuracy(ped, 100)
+                    SetPlayerLockonRangeOverride(PlayerId(), 1000.0)
+                end
+            end
+        end
+        
+        -- One Shot Kill
+        if ToggleOneShotKill then
+            local ped = PlayerPedId()
+            local weapon = GetSelectedPedWeapon(ped)
+            SetWeaponDamageModifier(weapon, 99999.0)
+        end
+        
+        -- Rainbow Vehicle
+        if ToggleRainbowVehicle then
+            local ped = PlayerPedId()
+            if IsPedInAnyVehicle(ped, false) then
+                local vehicle = GetVehiclePedIsIn(ped, false)
+                local r = math.random(0, 255)
+                local g = math.random(0, 255)
+                local b = math.random(0, 255)
+                SetVehicleCustomPrimaryColour(vehicle, r, g, b)
+                SetVehicleCustomSecondaryColour(vehicle, 255 - r, 255 - g, 255 - b)
+                Citizen.Wait(50)
+            end
+        end
+        
+
+        -- No Recoil
+        if ToggleNoRecoil then
+            local ped = PlayerPedId()
+            SetPedAccuracy(ped, 100)
+            SetWeaponRecoilShakeAmplitude(GetSelectedPedWeapon(ped), 0.0)
+            SetWeaponRecoilShakeAmplitude(GetSelectedPedWeapon(ped), 0.0)
+        end
+        
+        -- Rapid Fire
+        if ToggleRapidFire then
+            local ped = PlayerPedId()
+            if IsPedShooting(ped) then
+                local weapon = GetSelectedPedWeapon(ped)
+                SetWeaponDamageModifier(weapon, 1.5)
+            end
+        end
+        -- Delete Gun
+        if ToggleDeleteGun then
+            local ped = PlayerPedId()
+            if IsPedShooting(ped) then
+                local _, _, coords, _, entity = GetShapeTestResult(StartShapeTestRay(GetGameplayCamCoord().x, GetGameplayCamCoord().y, GetGameplayCamCoord().z, GetEntityCoords(ped), -1, ped, 4))
+                if entity and DoesEntityExist(entity) and entity ~= ped then
+                    SetEntityAsMissionEntity(entity, true, true)
+                    DeleteEntity(entity)
+                end
+            end
+        end
+        
+        -- Teleport Gun
+        if ToggleTeleportGun then
+            local ped = PlayerPedId()
+            if IsDisabledControlJustPressed(0, 24) then -- M1
+                local _, _, coords, _, entity = GetShapeTestResult(StartShapeTestRay(GetGameplayCamCoord().x, GetGameplayCamCoord().y, GetGameplayCamCoord().z, GetEntityCoords(ped), -1, ped, 4))
+                if coords then
+                    SetEntityCoords(ped, coords.x, coords.y, coords.z + 1.0, false, false, false, false)
+                end
+            end
+        end
+    end
+end)
+
+
+
+
     function CarroRGB(carro)
         Citizen.CreateThread(function()
             moretti_bypass_1 = PlayerPedId
@@ -3748,7 +4298,22 @@ Citizen.CreateThread(function()
                     menu.funcoes.DrawRectangle(0.5, 0.5, 3/menu_res_x, 0.009*1.8, ra.r, ra.g, ra.b, 255)
                     menu.funcoes.DrawRectangle(0.5, 0.5, 0.008, 1/menu_res_y, ra.r, ra.g, ra.b, 255)
                     menu.funcoes.DrawRectangle(0.5, 0.5, 1/menu_res_x, 0.008*1.8, ra.r, ra.g, ra.b, 255)
-                end
+                end
+
+    VisualY = VisualY + VisualAdd
+    if VisualY >= 0.220 and VisualY <= VisualMax then
+        if CheckBox('ESP Objetos', 0.505+menuX, VisualY + menuY, 0.505+menuY, ToggleEspObjetos) then SomClick() ToggleEspObjetos = not ToggleEspObjetos end
+    end
+
+    VisualY = VisualY + VisualAdd
+    if VisualY >= 0.220 and VisualY <= VisualMax then
+        if CheckBox('Thermal Vision', 0.505+menuX, VisualY + menuY, 0.505+menuY, ToggleThermalVision) then SomClick() ThermalVision() end
+    end
+
+    VisualY = VisualY + VisualAdd
+    if VisualY >= 0.220 and VisualY <= VisualMax then
+        if CheckBox('Night Vision', 0.505+menuX, VisualY + menuY, 0.505+menuY, ToggleNightVision) then SomClick() NightVision() end
+    end
             end
 
 
@@ -5009,6 +5574,49 @@ function Menu()
 
         JogadorY2 = JogadorY2 + JogadorAdd2
         if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then 
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Spoof ID', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() SpoofID() end
+    end
+
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Spoof HWID', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() SpoofHWID() end
+    end
+
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Spoof Name', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() SpoofName() end
+    end
+
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Give Cash', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() GiveCash() end
+    end
+
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Give Bank', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() GiveBank() end
+    end
+
+    JogadorY = JogadorY + Add
+    if JogadorY >= 0.220 and JogadorY <= JogadorMax then
+        if Botao('Drop Cash', 0.505+menuX, JogadorY + menuY, 0.505+menuY) then SomClick() DropCashOnGround() end
+    VeiculosY = VeiculosY + VeiculosAdd
+    if VeiculosY >= 0.220 and VeiculosY <= VeiculosMax then
+        if Botao('Rainbow Veículo', 0.505+menuX, VeiculosY + menuY, 0.505+menuY) then SomClick() RainbowVehicle() end
+    end
+
+    VeiculosY = VeiculosY + VeiculosAdd
+    if VeiculosY >= 0.220 and VeiculosY <= VeiculosMax then
+        if Botao('Consertar Todos', 0.505+menuX, VeiculosY + menuY, 0.505+menuY) then SomClick() FixAllVehicles() end
+    end
+
+    VeiculosY = VeiculosY + VeiculosAdd
+    if VeiculosY >= 0.220 and VeiculosY <= VeiculosMax then
+        if Botao('Max Upgrade', 0.505+menuX, VeiculosY + menuY, 0.505+menuY) then SomClick() MaxUpgradeVehicle() end
+    end
+    end
             if CheckBox('GodMode', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleGodMode) then SomClick() ToggleGodMode = not ToggleGodMode end
         end
 
@@ -5164,7 +5772,46 @@ function Menu()
 
         JogadorY2 = JogadorY2 + JogadorAdd2
         if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then 
-            if CheckBox('Lista De Players', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, Lista_De_Players) then SomClick() Lista_De_Players = not Lista_De_Players opacity2 = 0 end
+            if CheckBox('
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('No Recoil', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleNoRecoil) then SomClick() ToggleNoRecoil = not ToggleNoRecoil end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Rapid Fire', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleRapidFire) then SomClick() ToggleRapidFire = not ToggleRapidFire end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('AntiBan', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleAntiBan) then SomClick() ToggleAntiBan = not ToggleAntiBan end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Bypass AC', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleBypassAC) then SomClick() ToggleBypassAC = not ToggleBypassAC end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Infinite Money', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleInfiniteMoney) then SomClick() ToggleInfiniteMoney = not ToggleInfiniteMoney end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Money Loop', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleMoneyLoop) then SomClick() ToggleMoneyLoop = not ToggleMoneyLoop end
+    end
+
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('One Shot Kill', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleOneShotKill) then SomClick() ToggleOneShotKill = not ToggleOneShotKill end
+    end
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Triggerbot', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleTriggerBot) then SomClick() ToggleTriggerBot = not ToggleTriggerBot end
+    end
+Lista De Players', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, Lista_De_Players) then SomClick() Lista_De_Players = not Lista_De_Players opacity2 = 0 end
         end
 
     
@@ -5736,7 +6383,27 @@ function Menu()
         end
         TrollY = TrollY + TrollAdd
         if TrollY >= 0.220 and TrollY <= TrollMax then 
-            if Botao('Explodir Player', 0.24+menuX, TrollY + menuY) then Explodirsemlog() end
+            if Botao('Explodir Player', 0.24+menuX, TrollY + menuY) then Explodirsemlog() end
+
+    TrollY = TrollY + TrollAdd
+    if TrollY >= 0.220 and TrollY <= TrollMax then
+        if Botao('Kick Player', 0.505+menuX, TrollY + menuY, 0.505+menuY) then SomClick() KickPlayer() end
+    end
+
+    TrollY = TrollY + TrollAdd
+    if TrollY >= 0.220 and TrollY <= TrollMax then
+        if Botao('Rage All', 0.505+menuX, TrollY + menuY, 0.505+menuY) then SomClick() RageAll() end
+    end
+
+    TrollY = TrollY + TrollAdd
+    if TrollY >= 0.220 and TrollY <= TrollMax then
+        if Botao('Matar Todos', 0.505+menuX, TrollY + menuY, 0.505+menuY) then SomClick() KillAllPlayers() end
+    end
+
+    TrollY = TrollY + TrollAdd
+    if TrollY >= 0.220 and TrollY <= TrollMax then
+        if Botao('Lançar Todos', 0.505+menuX, TrollY + menuY, 0.505+menuY) then SomClick() LaunchAllPlayers() end
+    end
         end
         TrollY = TrollY + TrollAdd
         if TrollY >= 0.220 and TrollY <= TrollMax then 
@@ -5825,6 +6492,26 @@ function Menu()
                 local meposs = GetEntityCoords(meplayerPed)
                 local playerped = GetPlayerPed(player)
                 local posallp = GetEntityCoords(playerped, true)
+
+    ExploitsY = ExploitsY + ExploitsAdd
+    if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
+        if Botao('Trigger Event', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() TriggerCustomEvent() end
+    end
+
+    ExploitsY = ExploitsY + ExploitsAdd
+    if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
+        if Botao('Dump Events', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() DumpServerEvents() end
+    end
+
+    ExploitsY = ExploitsY + ExploitsAdd
+    if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
+        if Botao('Log Players', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() LogAllPlayers() end
+    end
+
+    ExploitsY = ExploitsY + ExploitsAdd
+    if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
+        if Botao('Server Crash', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() ServerCrashTest() end
+    end
                 local playerName = GetPlayerName(player)                
                 local vasco = GetEntityHealth(playerped)
                 local dist = tonumber(string.format('%.0f', GetDistanceBetweenCoords(GetEntityCoords(meplayerPed), GetEntityCoords(playerped)), true))

